@@ -68,6 +68,7 @@ func main() {
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", os.Args[1])
 		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge\n")
+		fmt.Fprintf(os.Stderr, "Usage: gitsqlite <operation> [sqlite-path]\n")
 		os.Exit(1) // Exit code 1 for invalid arguments
 	}
 }
