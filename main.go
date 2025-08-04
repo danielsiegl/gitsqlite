@@ -131,64 +131,80 @@ func executeSQL(db *sql.DB, sqlCommands string) error {
 	return nil
 }
 
-// dumpDatabase outputs the database schema and data as SQL statements using SQLite's built-in capabilities
+// dumpDatabase outputs the database schema and data using a comprehensive SQL-based approach
 func dumpDatabase(db *sql.DB) error {
-	// Output pragmas and begin transaction
-	fmt.Println("PRAGMA foreign_keys=OFF;")
-	fmt.Println("BEGIN TRANSACTION;")
-
-	// Get schema (tables, indexes, triggers, views) in proper order
-	schemaRows, err := db.Query(`
-		SELECT sql || ';' 
-		FROM sqlite_master 
-		WHERE type IN ('table','index','trigger','view') 
-		  AND name NOT LIKE 'sqlite_%' 
-		  AND sql IS NOT NULL
-		ORDER BY 
-			CASE type 
-				WHEN 'table' THEN 1 
-				WHEN 'index' THEN 2 
-				WHEN 'trigger' THEN 3 
-				WHEN 'view' THEN 4 
-			END, 
-			name
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to get schema: %w", err)
+	// Execute a comprehensive dump query that mimics .dump command
+	dumpQueries := []string{
+		"SELECT 'PRAGMA foreign_keys=OFF;'",
+		"SELECT 'BEGIN TRANSACTION;'",
+		`SELECT sql || ';' FROM sqlite_master 
+		 WHERE type IN ('table','index','trigger','view') 
+		   AND name NOT LIKE 'sqlite_%' 
+		   AND sql IS NOT NULL
+		 ORDER BY CASE type 
+		   WHEN 'table' THEN 1 
+		   WHEN 'index' THEN 2 
+		   WHEN 'trigger' THEN 3 
+		   WHEN 'view' THEN 4 
+		 END, name`,
 	}
-	defer schemaRows.Close()
 
-	// Output all schema statements
-	for schemaRows.Next() {
-		var sqlStmt string
-		if err := schemaRows.Scan(&sqlStmt); err != nil {
-			return fmt.Errorf("failed to scan schema statement: %w", err)
+	// Execute schema dump queries
+	for _, query := range dumpQueries {
+		if err := executeAndPrintQuery(db, query); err != nil {
+			return fmt.Errorf("failed to execute dump query: %w", err)
 		}
-		fmt.Println(sqlStmt)
 	}
 
-	// Get all user tables for data dumping
+	// Dump table data using the existing efficient method
+	if err := dumpAllTableDataSimple(db); err != nil {
+		return fmt.Errorf("failed to dump table data: %w", err)
+	}
+
+	// End transaction
+	fmt.Println("COMMIT;")
+	return nil
+}
+
+// executeAndPrintQuery executes a query and prints all results
+func executeAndPrintQuery(db *sql.DB, query string) error {
+	rows, err := db.Query(query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			return err
+		}
+		fmt.Println(result)
+	}
+	return nil
+}
+
+// dumpAllTableDataSimple dumps data for all tables using the proven quote() approach
+func dumpAllTableDataSimple(db *sql.DB) error {
+	// Get all table names
 	tableRows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
 	if err != nil {
 		return fmt.Errorf("failed to get table names: %w", err)
 	}
 	defer tableRows.Close()
 
-	// Dump data for each table using SQLite's quote() function for proper escaping
+	// Dump data for each table
 	for tableRows.Next() {
 		var tableName string
 		if err := tableRows.Scan(&tableName); err != nil {
 			return fmt.Errorf("failed to scan table name: %w", err)
 		}
 
-		// Dump data for this table using SQLite's quote() function for proper escaping
 		if err := dumpTableDataWithQuote(db, tableName); err != nil {
 			return fmt.Errorf("failed to dump data for table %s: %w", tableName, err)
 		}
 	}
 
-	// End transaction
-	fmt.Println("COMMIT;")
 	return nil
 }
 
