@@ -1,3 +1,3 @@
-module github.com/quarnster/gitsqlite
+module github.com/danielsiegl/gitsqlite
 
-go 1.18
+go 1.24
