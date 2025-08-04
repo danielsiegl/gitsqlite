@@ -98,4 +98,4 @@ if (-not (Test-Path -Path $binConfigDir)) {
     Write-Output "Created config directory in bin"
 }
 
-Write-Output "All builds complete and config files copied to bin directory"
+Write-Output "All builds complete!"
