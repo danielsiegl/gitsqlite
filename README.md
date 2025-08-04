@@ -14,8 +14,28 @@ I couldn't get the `sqlite3` command line tool to directly read/write the binary
 
 Install via
 ```
-go install github.com/quarnster/gitsqlite@latest
+go install github.com/danielsiegl/gitsqlite@latest
 git config --global filter.gitsqlite.clean "gitsqlite clean"
 git config --global filter.gitsqlite.smudge "gitsqlite smudge"
 echo "*.db filter=gitsqlite" >> .gitattributes
+```
+
+## SQLite Installation
+
+If you don't have SQLite installed, you can install it via winget:
+```
+winget install -e --id SQLite.SQLite
+```
+
+Or use the provided installation scripts:
+- `install_sqlite.bat` - Installs SQLite and adds to PATH
+- `add_sqlite_to_path.bat` - Adds existing SQLite installation to PATH
+- `set_sqlite_session.bat` - Adds SQLite to current terminal session
+
+## Custom SQLite Path
+
+If SQLite is not in your PATH, you can specify a custom path:
+```
+git config --global filter.gitsqlite.clean "gitsqlite clean /path/to/sqlite3"
+git config --global filter.gitsqlite.smudge "gitsqlite smudge /path/to/sqlite3"
 ```
