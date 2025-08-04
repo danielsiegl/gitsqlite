@@ -131,124 +131,118 @@ func executeSQL(db *sql.DB, sqlCommands string) error {
 	return nil
 }
 
-// dumpDatabase outputs the database schema and data as SQL statements
+// dumpDatabase outputs the database schema and data as SQL statements using SQLite's built-in capabilities
 func dumpDatabase(db *sql.DB) error {
-	// Start with pragma and transaction
+	// Output pragmas and begin transaction
 	fmt.Println("PRAGMA foreign_keys=OFF;")
 	fmt.Println("BEGIN TRANSACTION;")
 
-	// Get all table names
-	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+	// Get schema (tables, indexes, triggers, views) in proper order
+	schemaRows, err := db.Query(`
+		SELECT sql || ';' 
+		FROM sqlite_master 
+		WHERE type IN ('table','index','trigger','view') 
+		  AND name NOT LIKE 'sqlite_%' 
+		  AND sql IS NOT NULL
+		ORDER BY 
+			CASE type 
+				WHEN 'table' THEN 1 
+				WHEN 'index' THEN 2 
+				WHEN 'trigger' THEN 3 
+				WHEN 'view' THEN 4 
+			END, 
+			name
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to get schema: %w", err)
+	}
+	defer schemaRows.Close()
+
+	// Output all schema statements
+	for schemaRows.Next() {
+		var sqlStmt string
+		if err := schemaRows.Scan(&sqlStmt); err != nil {
+			return fmt.Errorf("failed to scan schema statement: %w", err)
+		}
+		fmt.Println(sqlStmt)
+	}
+
+	// Get all user tables for data dumping
+	tableRows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
 	if err != nil {
 		return fmt.Errorf("failed to get table names: %w", err)
 	}
-	defer rows.Close()
+	defer tableRows.Close()
 
-	var tables []string
-	for rows.Next() {
+	// Dump data for each table using SQLite's quote() function for proper escaping
+	for tableRows.Next() {
 		var tableName string
-		if err := rows.Scan(&tableName); err != nil {
+		if err := tableRows.Scan(&tableName); err != nil {
 			return fmt.Errorf("failed to scan table name: %w", err)
 		}
-		tables = append(tables, tableName)
-	}
 
-	// Dump schema for each table
-	for _, table := range tables {
-		if err := dumpTableSchema(db, table); err != nil {
-			return fmt.Errorf("failed to dump schema for table %s: %w", table, err)
-		}
-	}
-
-	// Dump data for each table
-	for _, table := range tables {
-		if err := dumpTableData(db, table); err != nil {
-			return fmt.Errorf("failed to dump data for table %s: %w", table, err)
+		// Dump data for this table using SQLite's quote() function for proper escaping
+		if err := dumpTableDataWithQuote(db, tableName); err != nil {
+			return fmt.Errorf("failed to dump data for table %s: %w", tableName, err)
 		}
 	}
 
 	// End transaction
 	fmt.Println("COMMIT;")
-
 	return nil
 }
 
-// dumpTableSchema outputs the CREATE TABLE statement for a table
-func dumpTableSchema(db *sql.DB, tableName string) error {
-	var sql string
-	row := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", tableName)
-	if err := row.Scan(&sql); err != nil {
-		return fmt.Errorf("failed to get schema for table %s: %w", tableName, err)
-	}
-
-	fmt.Printf("%s;\n", sql)
-	return nil
-}
-
-// dumpTableData outputs INSERT statements for all data in a table
-func dumpTableData(db *sql.DB, tableName string) error {
-	// Get column information
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+// dumpTableDataWithQuote uses SQLite's quote() function for proper value escaping
+func dumpTableDataWithQuote(db *sql.DB, tableName string) error {
+	// First, get column names
+	colRows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
 	if err != nil {
 		return fmt.Errorf("failed to get table info: %w", err)
 	}
-	defer rows.Close()
+	defer colRows.Close()
 
 	var columns []string
-	for rows.Next() {
+	for colRows.Next() {
 		var cid int
 		var name, dataType string
 		var notNull, pk int
 		var defaultValue sql.NullString
 
-		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+		if err := colRows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
 			return fmt.Errorf("failed to scan column info: %w", err)
 		}
 		columns = append(columns, name)
 	}
 
-	// Get all data from the table
-	dataRows, err := db.Query(fmt.Sprintf("SELECT * FROM %s", tableName))
+	if len(columns) == 0 {
+		return nil // No columns, skip this table
+	}
+
+	// Build the query with quote() for each column
+	quotedCols := make([]string, len(columns))
+	for i, col := range columns {
+		quotedCols[i] = fmt.Sprintf("quote(%s)", col)
+	}
+
+	// Create a query that produces properly quoted INSERT statements
+	query := fmt.Sprintf(`
+		SELECT 'INSERT INTO %s VALUES(' || %s || ');'
+		FROM %s
+	`, tableName, strings.Join(quotedCols, "||','||"), tableName)
+
+	dataRows, err := db.Query(query)
 	if err != nil {
 		return fmt.Errorf("failed to query table data: %w", err)
 	}
 	defer dataRows.Close()
 
-	// Create column placeholders
-	columnList := strings.Join(columns, ",")
-
+	// Output each INSERT statement
 	for dataRows.Next() {
-		// Create a slice to hold the values
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
+		var insertStmt string
+		if err := dataRows.Scan(&insertStmt); err != nil {
+			return fmt.Errorf("failed to scan insert statement: %w", err)
 		}
-
-		// Scan the row
-		if err := dataRows.Scan(valuePtrs...); err != nil {
-			return fmt.Errorf("failed to scan row: %w", err)
-		}
-
-		// Build the INSERT statement
-		var valueStrings []string
-		for _, value := range values {
-			if value == nil {
-				valueStrings = append(valueStrings, "NULL")
-			} else {
-				switch v := value.(type) {
-				case string:
-					valueStrings = append(valueStrings, fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''")))
-				case []byte:
-					valueStrings = append(valueStrings, fmt.Sprintf("'%s'", strings.ReplaceAll(string(v), "'", "''")))
-				default:
-					valueStrings = append(valueStrings, fmt.Sprintf("%v", v))
-				}
-			}
-		}
-
-		fmt.Printf("INSERT INTO %s(%s) VALUES(%s);\n",
-			tableName, columnList, strings.Join(valueStrings, ","))
+		fmt.Println(insertStmt)
 	}
 
 	return nil
