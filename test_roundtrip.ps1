@@ -40,6 +40,152 @@ if (-not (Test-Path $modelSqlFile)) {
 
 Write-Host "Using database schema from: $modelSqlFile" -ForegroundColor Cyan
 
+# Function to download and test external SQL file
+function Test-GitSqliteWithExternalFile {
+    param(
+        [string]$SqliteExe,
+        [string]$Url,
+        [string]$FileName
+    )
+    
+    $tempSqlFile = "temp_$FileName"
+    $dbFile = "temp_external.db"
+    $outputFile = "temp_external_output.sql"
+    
+    try {
+        Write-Host "Downloading SQL file from GitHub repository..." -ForegroundColor Green
+        Write-Host "URL: $Url" -ForegroundColor Cyan
+        
+        # Download the file
+        try {
+            Invoke-WebRequest -Uri $Url -OutFile $tempSqlFile -UseBasicParsing
+            Write-Host "✓ Downloaded: $tempSqlFile" -ForegroundColor Green
+        } catch {
+            throw "Failed to download file from $Url`: $_"
+        }
+        
+        # Check file size
+        $fileInfo = Get-Item $tempSqlFile
+        $fileSizeKB = [math]::Round($fileInfo.Length / 1024, 2)
+        Write-Host "Downloaded file size: $($fileInfo.Length) bytes ($fileSizeKB KB)" -ForegroundColor Cyan
+        
+        Write-Host "Converting downloaded SQL to database using gitsqlite smudge..." -ForegroundColor Green
+        
+        # Use gitsqlite smudge operation to create database from downloaded SQL file
+        if ($SqliteExe -eq "sqlite3") {
+            cmd /c ".\gitsqlite.exe smudge < `"$tempSqlFile`" > `"$dbFile`""
+        } else {
+            cmd /c ".\gitsqlite.exe smudge `"$SqliteExe`" < `"$tempSqlFile`" > `"$dbFile`""
+        }
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "gitsqlite smudge command failed with exit code $LASTEXITCODE"
+        }
+        
+        # Verify the database was created
+        if (-not (Test-Path $dbFile)) {
+            throw "Database file was not created by smudge operation"
+        }
+        
+        # Get database file size info
+        $dbInfo = Get-Item $dbFile
+        $dbSizeKB = [math]::Round($dbInfo.Length / 1024, 2)
+        $dbSizeMB = [math]::Round($dbInfo.Length / (1024 * 1024), 2)
+        Write-Host "Database created - Size: $($dbInfo.Length) bytes ($dbSizeKB KB / $dbSizeMB MB)" -ForegroundColor Cyan
+        
+        Write-Host "Converting database back to SQL using gitsqlite clean..." -ForegroundColor Green
+        
+        # Convert back to SQL
+        if ($SqliteExe -eq "sqlite3") {
+            cmd /c ".\gitsqlite.exe clean < `"$dbFile`" > `"$outputFile`""
+        } else {
+            cmd /c ".\gitsqlite.exe clean `"$SqliteExe`" < `"$dbFile`" > `"$outputFile`""
+        }
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "gitsqlite clean command failed with exit code $LASTEXITCODE"
+        }
+        
+        # Compare original downloaded file with cleaned output
+        Write-Host "Comparing original downloaded SQL with cleaned output..." -ForegroundColor Magenta
+        
+        $originalContent = Get-Content $tempSqlFile -Raw
+        $cleanedContent = Get-Content $outputFile -Raw
+        
+        # Normalize line endings for comparison (convert both to Unix style)
+        $originalContent = $originalContent -replace "`r`n", "`n"
+        $cleanedContent = $cleanedContent -replace "`r`n", "`n"
+        
+        $originalLines = ($originalContent -split "`n").Count
+        $cleanedLines = ($cleanedContent -split "`n").Count
+        $originalSizeKB = [math]::Round(($originalContent.Length) / 1024, 2)
+        $cleanedSizeKB = [math]::Round(($cleanedContent.Length) / 1024, 2)
+        
+        Write-Host "Original downloaded: $originalLines lines, $originalSizeKB KB" -ForegroundColor Cyan
+        Write-Host "Cleaned output:      $cleanedLines lines, $cleanedSizeKB KB" -ForegroundColor Cyan
+        
+        if ($originalContent -eq $cleanedContent) {
+            Write-Host "✓ PERFECT: External file round-trip successful!" -ForegroundColor Green
+            Write-Host "The downloaded SQL file processes correctly through gitsqlite." -ForegroundColor Green
+            $success = $true
+        } else {
+            Write-Host "✗ DIFFERENCE: External file round-trip shows differences!" -ForegroundColor Yellow
+            Write-Host "This may be due to sqlite_sequence filtering or format normalization." -ForegroundColor Yellow
+            
+            # Show some statistics about the differences
+            $diff = Compare-Object -ReferenceObject ($originalContent -split "`n") -DifferenceObject ($cleanedContent -split "`n")
+            if ($diff) {
+                $addedLines = ($diff | Where-Object { $_.SideIndicator -eq "=>" }).Count
+                $removedLines = ($diff | Where-Object { $_.SideIndicator -eq "<=" }).Count
+                Write-Host "Differences: $removedLines lines from original, $addedLines lines in output" -ForegroundColor Yellow
+                
+                # Show first few differences for analysis
+                Write-Host ""
+                Write-Host "First 5 differences (for analysis):" -ForegroundColor Yellow
+                $diff | Select-Object -First 5 | ForEach-Object {
+                    $source = if ($_.SideIndicator -eq "<=") { "Original" } else { "Cleaned" }
+                    $color = if ($_.SideIndicator -eq "<=") { "Cyan" } else { "Magenta" }
+                    Write-Host "$source`: $($_.InputObject)" -ForegroundColor $color
+                }
+            }
+            $success = $false
+        }
+        
+        # Copy files to testoutput folder for analysis
+        $testOutputDir = "testoutput"
+        if (-not (Test-Path $testOutputDir)) {
+            New-Item -ItemType Directory -Path $testOutputDir -Force | Out-Null
+        }
+        
+        try {
+            $externalOriginalCopy = "$testOutputDir\04_external_original_$FileName"
+            $externalCleanedCopy = "$testOutputDir\05_external_cleaned_$FileName"
+            
+            Copy-Item $tempSqlFile $externalOriginalCopy -Force
+            Copy-Item $outputFile $externalCleanedCopy -Force
+            
+            Write-Host ""
+            Write-Host "✓ Copied external original to: $externalOriginalCopy" -ForegroundColor Green
+            Write-Host "✓ Copied external cleaned to: $externalCleanedCopy" -ForegroundColor Green
+        } catch {
+            Write-Host "Warning: Failed to copy external test files to output folder: $_" -ForegroundColor Yellow
+        }
+        
+        return $success
+        
+    } catch {
+        Write-Host "Error during external file test: $_" -ForegroundColor Red
+        return $false
+    } finally {
+        # Clean up temporary files
+        @($tempSqlFile, $dbFile, $outputFile) | ForEach-Object {
+            if (Test-Path $_) {
+                Remove-Item $_ -Force
+            }
+        }
+    }
+}
+
 # Function to perform complete round-trip test
 function Test-GitSqliteRoundtrip {
     param(
@@ -121,9 +267,18 @@ try {
     # Initialize success flags
     $roundTripSuccess = $false
     $originalMatchSuccess = $false
+    $externalFileSuccess = $false
     
     $output1 = Test-GitSqliteRoundtrip -TestNumber 1 -SqliteExe $sqliteExe -ModelSqlFile $modelSqlFile
     $output2 = Test-GitSqliteRoundtrip -TestNumber 2 -SqliteExe $sqliteExe -ModelSqlFile $modelSqlFile
+    
+    # Test with external file from GitHub
+    Write-Host ""
+    Write-Host "Testing with external SQL file from GitHub..." -ForegroundColor Magenta
+    Write-Host "==============================================" -ForegroundColor Magenta
+    $externalFileUrl = "https://raw.githubusercontent.com/danielsiegl/gitsqliteqeax/main/Model.qeax"
+    $externalFileSuccess = Test-GitSqliteWithExternalFile -SqliteExe $sqliteExe -Url $externalFileUrl -FileName "Model.qeax"
+    Write-Host ""
     
     # Compare the outputs
     Write-Host "Comparing outputs..." -ForegroundColor Magenta
@@ -236,6 +391,7 @@ Test Status:
 SUCCESS: The gitsqlite tool is working perfectly.
 - Round-trip conversions are consistent
 - Generated SQL matches the original format
+- External file test: $(if ($externalFileSuccess) { "✓ PASSED" } else { "⚠ DIFFERENCES FOUND" })
 "@
     } else {
         $statusLines = @("Test Status:", "============", "FAILURE: The gitsqlite tool has problems.")
@@ -245,6 +401,7 @@ SUCCESS: The gitsqlite tool is working perfectly.
         if (-not $originalMatchSuccess) {
             $statusLines += "- Generated SQL does NOT match original format"
         }
+        $statusLines += "- External file test: $(if ($externalFileSuccess) { "✓ PASSED" } else { "⚠ DIFFERENCES FOUND" })"
         $statusSection = $statusLines -join "`n"
     }
     
@@ -263,6 +420,7 @@ Test Results:
 =============
 Round-trip Consistency: $(if ($roundTripSuccess) { "✓ PASSED" } else { "✗ FAILED" }) - Both complete cycles $(if ($roundTripSuccess) { "produced identical results" } else { "produced DIFFERENT results" })
 Original Match Test: $(if ($originalMatchSuccess) { "✓ PASSED" } else { "✗ FAILED" }) - Generated SQL $(if ($originalMatchSuccess) { "matches original Model.sql" } else { "differs from original Model.sql" })
+External File Test: $(if ($externalFileSuccess) { "✓ PASSED" } else { "⚠ DIFFERENCES" }) - External GitHub SQL file $(if ($externalFileSuccess) { "processes identically" } else { "shows format differences" })
 Overall Result: $testResult
 
 File Information:
@@ -281,16 +439,27 @@ $(if (-not $originalMatchSuccess) { "- These differences indicate format preserv
 
 Files in this directory:
 =======================
-00_test_summary.txt    - This summary file
-01_original_model.sql  - Original Model.sql file
-02_generated_test1.sql - First complete round-trip output (SQL → smudge → clean → SQL)
-03_generated_test2.sql - Second complete round-trip output (SQL → smudge → clean → SQL)
+00_test_summary.txt       - This summary file
+01_original_model.sql     - Original Model.sql file
+02_generated_test1.sql    - First complete round-trip output (SQL → smudge → clean → SQL)
+03_generated_test2.sql    - Second complete round-trip output (SQL → smudge → clean → SQL)
+04_external_original_*    - Original downloaded external SQL file from GitHub
+05_external_cleaned_*     - Cleaned output from external SQL file round-trip
 
 Notes:
 ======
-For the tool to be production-ready, BOTH tests must pass:
-1. Round-trip consistency (Test 1 vs Test 2)
-2. Original format preservation (Generated vs Original)$finalNotes
+For the tool to be production-ready, the core tests must pass:
+1. Round-trip consistency (Test 1 vs Test 2) - CRITICAL
+2. Original format preservation (Generated vs Original) - CRITICAL
+3. External file processing - INFORMATIONAL (differences may be expected)
+
+The external file test downloads Model.qeax from:
+https://github.com/danielsiegl/gitsqliteqeax/blob/main/Model.qeax
+
+External file differences are often due to:
+- sqlite_sequence entries being filtered out
+- Line ending normalization
+- SQLite format standardization$finalNotes
 "@
     
     Set-Content -Path $summaryFile -Value $summary -Encoding UTF8
@@ -301,8 +470,8 @@ For the tool to be production-ready, BOTH tests must pass:
     
     # Final result and exit code
     Write-Host ""
-    if ($roundTripSuccess -and $originalMatchSuccess) {
-        Write-Host "Round-trip test completed successfully!" -ForegroundColor Green
+    if ($roundTripSuccess -and $originalMatchSuccess -and $externalFileSuccess) {
+        Write-Host "All tests completed successfully!" -ForegroundColor Green
         $exitCode = 0
     } else {
         if (-not $roundTripSuccess) {
@@ -313,7 +482,11 @@ For the tool to be production-ready, BOTH tests must pass:
             Write-Host "✗ ERROR: Generated SQL does not match original Model.sql!" -ForegroundColor Red
             Write-Host "The round-trip conversion is not preserving the original format." -ForegroundColor Red
         }
-        $exitCode = 1
+        if (-not $externalFileSuccess) {
+            Write-Host "⚠ WARNING: External file test showed differences!" -ForegroundColor Yellow
+            Write-Host "This may be expected due to sqlite_sequence filtering or format differences." -ForegroundColor Yellow
+        }
+        $exitCode = if ($roundTripSuccess -and $originalMatchSuccess) { 0 } else { 1 }
     }
     
 } catch {
