@@ -24,13 +24,11 @@ function Build-GoApplication {
             $gitCommit = git rev-parse HEAD
             $gitCommitShort = git rev-parse --short HEAD
             $gitBranch = git rev-parse --abbrev-ref HEAD
-            $buildTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
             $version = "1.0.0-$gitCommitShort"
         } catch {
             Write-Warning "Could not get Git information, using defaults"
             $gitCommit = "unknown"
             $gitBranch = "unknown"
-            $buildTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
             $version = "dev"
         }
         
@@ -45,23 +43,17 @@ function Build-GoApplication {
             "gitsqlite-$GOOS-$GOARCH"
         }
 
+        # Get build time in a format without spaces to avoid escaping issues
+        $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        
         # Build ldflags with version information
-        $ldflags = @(
-            "-X", "main.GitCommit=$gitCommit",
-            "-X", "main.GitBranch=$gitBranch", 
-            "-X", "main.BuildTime=$buildTime",
-            "-X", "main.Version=$version"
-        )
+        $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
         
         if ($ContractFile -ne "") {
-            $ldflags += @("-X", "main.defaultContractFile=$ContractFile")
+            $ldflagsString += " -X main.defaultContractFile=$ContractFile"
         }
         
-        # Convert ldflags array to single string
-        $ldflagsString = $ldflags -join " "
-        
-        # Perform the build using & operator for better argument handling
-        Write-Output "Executing: go build -ldflags '$ldflagsString' -o $outputFile"
+        Write-Output "Executing: go build -ldflags `"$ldflagsString`" -o `"$outputFile`""
         & go build -ldflags $ldflagsString -o $outputFile
         
         if ($LASTEXITCODE -ne 0) {
