@@ -19,6 +19,21 @@ function Build-GoApplication {
 
         Write-Output "Building for $env:GOOS"
         
+        # Get Git information for version
+        try {
+            $gitCommit = git rev-parse HEAD
+            $gitCommitShort = git rev-parse --short HEAD
+            $gitBranch = git rev-parse --abbrev-ref HEAD
+            $buildTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+            $version = "1.0.0-$gitCommitShort"
+        } catch {
+            Write-Warning "Could not get Git information, using defaults"
+            $gitCommit = "unknown"
+            $gitBranch = "unknown"
+            $buildTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+            $version = "dev"
+        }
+        
         # Determine output filename based on OS
         $outputFile = if ($GOOS -eq "windows") {
             "gitsqlite-$GOOS-$GOARCH.exe"
@@ -30,10 +45,13 @@ function Build-GoApplication {
             "gitsqlite-$GOOS-$GOARCH"
         }
 
+        # Build ldflags with version information
+        $versionFlags = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X `"main.BuildTime=$buildTime`" -X main.Version=$version"
+        
         # Build command with contract file if specified
-        $buildCmd = "go build -o $outputFile"
+        $buildCmd = "go build -ldflags `"$versionFlags`" -o $outputFile"
         if ($ContractFile -ne "") {
-            $buildCmd += " -ldflags `"-X main.defaultContractFile=$ContractFile`""
+            $buildCmd = "go build -ldflags `"$versionFlags -X main.defaultContractFile=$ContractFile`" -o $outputFile"
         }
         
         # Perform the build
