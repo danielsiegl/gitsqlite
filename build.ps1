@@ -46,16 +46,27 @@ function Build-GoApplication {
         }
 
         # Build ldflags with version information
-        $versionFlags = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X `"main.BuildTime=$buildTime`" -X main.Version=$version"
+        $ldflags = @(
+            "-X", "main.GitCommit=$gitCommit",
+            "-X", "main.GitBranch=$gitBranch", 
+            "-X", "main.BuildTime=$buildTime",
+            "-X", "main.Version=$version"
+        )
         
-        # Build command with contract file if specified
-        $buildCmd = "go build -ldflags `"$versionFlags`" -o $outputFile"
         if ($ContractFile -ne "") {
-            $buildCmd = "go build -ldflags `"$versionFlags -X main.defaultContractFile=$ContractFile`" -o $outputFile"
+            $ldflags += @("-X", "main.defaultContractFile=$ContractFile")
         }
         
-        # Perform the build
-        Invoke-Expression $buildCmd
+        # Convert ldflags array to single string
+        $ldflagsString = $ldflags -join " "
+        
+        # Perform the build using & operator for better argument handling
+        Write-Output "Executing: go build -ldflags '$ldflagsString' -o $outputFile"
+        & go build -ldflags $ldflagsString -o $outputFile
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Build failed with exit code $LASTEXITCODE"
+        }
         
         # Create bin directory if it doesn't exist
         $binDir = "bin"
