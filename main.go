@@ -19,29 +19,40 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		
+
 		// Skip sqlite_sequence table creation
 		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
 			continue
 		}
-		
+
 		// Skip sqlite_sequence insertions
 		if strings.Contains(line, "INSERT INTO sqlite_sequence VALUES") {
 			continue
 		}
-		
+
 		// Write the line if it's not filtered out
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return err
 		}
 	}
-	
+
 	return scanner.Err()
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatalln("Usage: gitsqlite <operation> [sqlite-path]")
+		log.Fatalln("Usage: gitsqlite <operation> [sqlite-path]\nOperations: clean, smudge, version/location")
+	}
+
+	// Handle version/location command
+	if os.Args[1] == "version" || os.Args[1] == "location" || os.Args[1] == "--version" || os.Args[1] == "--location" {
+		execPath, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("gitsqlite executable location: %s\n", execPath)
+		return
 	}
 
 	// Default sqlite3 command, can be overridden by optional parameter
@@ -96,26 +107,26 @@ func main() {
 
 		// Run the SQLite command to dump the database
 		cmd := exec.Command(sqliteCmd, f.Name(), ".dump")
-		
+
 		// Create a pipe to capture and filter the output
 		cmdOut, err := cmd.StdoutPipe()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating pipe for SQLite output: %v\n", err)
 			os.Exit(3)
 		}
-		
+
 		// Start the command
 		if err := cmd.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error starting SQLite command for clean operation: %v\n", err)
 			os.Exit(3)
 		}
-		
+
 		// Filter the output to remove sqlite_sequence entries
 		if err := filterSqliteSequence(cmdOut, os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Error filtering SQLite output: %v\n", err)
 			os.Exit(3)
 		}
-		
+
 		// Wait for the command to complete
 		if err := cmd.Wait(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for clean operation: %v\n", err)
@@ -123,7 +134,7 @@ func main() {
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", os.Args[1])
-		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge\n")
+		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge, version, location\n")
 		os.Exit(1) // Exit code 1 for invalid arguments
 	}
 }
