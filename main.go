@@ -27,23 +27,26 @@ func main() {
 		os.Exit(2) // Exit code 2 for command not found
 	}
 
-	f, err := os.CreateTemp("", "gitsqlite")
+	f, err := os.CreateTemp("", "gitsqlite-*.db")
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer os.Remove(f.Name())
+
+	tempFileName := f.Name()
+
 	switch os.Args[1] {
 	case "smudge":
 		// Reads sql commands from stdin and writes
 		// the resulting binary sqlite3 database to stdout
 		f.Close()
-		cmd := exec.Command(sqliteCmd, f.Name())
+		cmd := exec.Command(sqliteCmd, tempFileName)
 		cmd.Stdin = os.Stdin
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
 			os.Exit(3) // Exit code 3 for SQLite execution error
 		}
-		f, err = os.Open(f.Name())
+		f, err = os.Open(tempFileName)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -59,6 +62,8 @@ func main() {
 			log.Fatalln(err)
 		}
 		f.Close()
+
+		// Run the SQLite command to dump the database from os.stdin and not a tempfile
 		cmd := exec.Command(sqliteCmd, f.Name(), ".dump")
 		cmd.Stdout = os.Stdout
 		if err := cmd.Run(); err != nil {
