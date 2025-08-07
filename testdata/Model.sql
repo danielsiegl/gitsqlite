@@ -1,4 +1,4 @@
-PRAGMA foreign_keys=OFF;
+﻿PRAGMA foreign_keys=OFF;
 BEGIN TRANSACTION;
 CREATE TABLE t_attribute
 (
@@ -6045,37 +6045,6 @@ INSERT INTO usysTables VALUES('t_xref',7,'XRef','3.1.0','9.9.9');
 INSERT INTO usysTables VALUES('t_xrefsystem',7,'System XRef','3.5.0','9.9.9');
 INSERT INTO usysTables VALUES('t_xrefuser',7,'User XRef','3.5.0','9.9.9');
 INSERT INTO usysTables VALUES('usys_system',7,'System Settings','3.1.0','9.9.9');
-INSERT INTO sqlite_sequence VALUES('t_attribute',884);
-INSERT INTO sqlite_sequence VALUES('t_connector',854);
-INSERT INTO sqlite_sequence VALUES('t_datatypes',831);
-INSERT INTO sqlite_sequence VALUES('t_diagram',108);
-INSERT INTO sqlite_sequence VALUES('t_diagramlinks',765);
-INSERT INTO sqlite_sequence VALUES('t_diagramobjects',874);
-INSERT INTO sqlite_sequence VALUES('t_object',1904);
-INSERT INTO sqlite_sequence VALUES('t_objectproperties',5771);
-INSERT INTO sqlite_sequence VALUES('t_package',439);
-INSERT INTO sqlite_sequence VALUES('t_attribute',884);
-INSERT INTO sqlite_sequence VALUES('t_connector',854);
-INSERT INTO sqlite_sequence VALUES('t_datatypes',831);
-INSERT INTO sqlite_sequence VALUES('t_diagram',108);
-INSERT INTO sqlite_sequence VALUES('t_diagramlinks',765);
-INSERT INTO sqlite_sequence VALUES('t_diagramobjects',874);
-INSERT INTO sqlite_sequence VALUES('t_object',1904);
-INSERT INTO sqlite_sequence VALUES('t_objectproperties',5771);
-INSERT INTO sqlite_sequence VALUES('t_package',439);
-INSERT INTO sqlite_sequence VALUES('t_datatypes',831);
-INSERT INTO sqlite_sequence VALUES('t_package',439);
-INSERT INTO sqlite_sequence VALUES('t_object',1904);
-INSERT INTO sqlite_sequence VALUES('t_diagram',108);
-INSERT INTO sqlite_sequence VALUES('t_diagramobjects',874);
-INSERT INTO sqlite_sequence VALUES('t_objectproperties',5771);
-INSERT INTO sqlite_sequence VALUES('t_attribute',884);
-INSERT INTO sqlite_sequence VALUES('t_connector',854);
-INSERT INTO sqlite_sequence VALUES('t_diagramlinks',765);
-INSERT INTO sqlite_sequence VALUES('t_operation',30);
-INSERT INTO sqlite_sequence VALUES('t_attributetag',3);
-INSERT INTO sqlite_sequence VALUES('t_operationtag',16);
-INSERT INTO sqlite_sequence VALUES('t_connectortag',213);
 CREATE INDEX ix_attribute_classifier
  ON t_attribute (Classifier ASC);
 CREATE INDEX ix_attribute_name

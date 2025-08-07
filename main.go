@@ -1,12 +1,43 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 )
+
+// filterSqliteSequence filters out sqlite_sequence table creation and insertions
+// from SQLite dump output to make it more consistent with original SQL
+func filterSqliteSequence(input io.Reader, output io.Writer) error {
+	scanner := bufio.NewScanner(input)
+	writer := bufio.NewWriter(output)
+	defer writer.Flush()
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		
+		// Skip sqlite_sequence table creation
+		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
+			continue
+		}
+		
+		// Skip sqlite_sequence insertions
+		if strings.Contains(line, "INSERT INTO sqlite_sequence VALUES") {
+			continue
+		}
+		
+		// Write the line if it's not filtered out
+		if _, err := writer.WriteString(line + "\n"); err != nil {
+			return err
+		}
+	}
+	
+	return scanner.Err()
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -57,18 +88,38 @@ func main() {
 	case "clean":
 		// Reads a binary sqlite3 database from stdin
 		// and dumps out the sql commands that created it
-		// to stdout
+		// to stdout, filtering out sqlite_sequence entries
 		if _, err := io.Copy(f, os.Stdin); err != nil {
 			log.Fatalln(err)
 		}
 		f.Close()
 
-		// Run the SQLite command to dump the database from os.stdin and not a tempfile
+		// Run the SQLite command to dump the database
 		cmd := exec.Command(sqliteCmd, f.Name(), ".dump")
-		cmd.Stdout = os.Stdout
-		if err := cmd.Run(); err != nil {
+		
+		// Create a pipe to capture and filter the output
+		cmdOut, err := cmd.StdoutPipe()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating pipe for SQLite output: %v\n", err)
+			os.Exit(3)
+		}
+		
+		// Start the command
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error starting SQLite command for clean operation: %v\n", err)
+			os.Exit(3)
+		}
+		
+		// Filter the output to remove sqlite_sequence entries
+		if err := filterSqliteSequence(cmdOut, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "Error filtering SQLite output: %v\n", err)
+			os.Exit(3)
+		}
+		
+		// Wait for the command to complete
+		if err := cmd.Wait(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for clean operation: %v\n", err)
-			os.Exit(3) // Exit code 3 for SQLite execution error
+			os.Exit(3)
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", os.Args[1])
