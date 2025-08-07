@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -38,7 +39,7 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 			continue
 		}
 
-		// Write the line if it's not filtered out
+		// Write the line if it's not filtered out - use Unix line endings for consistency
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return err
 		}
@@ -48,37 +49,78 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalln("Usage: gitsqlite <operation> [sqlite-path]\nOperations: clean, smudge, version/location")
+	// Define flags
+	var (
+		showVersion  = flag.Bool("version", false, "Show version information")
+		showLocation = flag.Bool("location", false, "Show executable location and version information")
+		sqliteCmd    = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
+		showHelp     = flag.Bool("help", false, "Show help information")
+	)
+
+	// Custom usage function
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] <operation>\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Operations:\n")
+		fmt.Fprintf(os.Stderr, "  clean   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout)\n")
+		fmt.Fprintf(os.Stderr, "  smudge  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  %s clean < database.db > database.sql\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s smudge < database.sql > database.db\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -sqlite /usr/local/bin/sqlite3 clean < database.db\n", os.Args[0])
 	}
 
-	// Handle version/location command
-	if os.Args[1] == "version" || os.Args[1] == "location" || os.Args[1] == "--version" || os.Args[1] == "--location" {
-		execPath, err := os.Executable()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
-			os.Exit(1)
-		}
+	// Parse flags
+	flag.Parse()
 
+	// Handle help flag
+	if *showHelp {
+		flag.Usage()
+		return
+	}
+
+	// Handle version/location flags
+	if *showVersion || *showLocation {
 		fmt.Printf("gitsqlite version %s\n", Version)
 		fmt.Printf("Git commit: %s\n", GitCommit)
 		fmt.Printf("Git branch: %s\n", GitBranch)
 		fmt.Printf("Build time: %s\n", BuildTime)
-		fmt.Printf("Executable location: %s\n", execPath)
+
+		if *showLocation {
+			execPath, err := os.Executable()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("Executable location: %s\n", execPath)
+		}
 		return
 	}
 
-	// Default sqlite3 command, can be overridden by optional parameter
-	sqliteCmd := "sqlite3"
-	if len(os.Args) >= 3 {
-		sqliteCmd = os.Args[2]
+	// Get remaining arguments (should be the operation)
+	args := flag.Args()
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, "Error: No operation specified\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	operation := args[0]
+
+	// Validate operation
+	if operation != "clean" && operation != "smudge" {
+		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", operation)
+		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge\n")
+		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
+		os.Exit(1)
 	}
 
 	// Check if sqlite3 executable exists and is accessible
-	if _, err := exec.LookPath(sqliteCmd); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: SQLite executable '%s' not found in PATH or does not exist\n", sqliteCmd)
-		fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path as a second argument\n")
-		fmt.Fprintf(os.Stderr, "Usage: gitsqlite <operation> [sqlite-path]\n")
+	if _, err := exec.LookPath(*sqliteCmd); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: SQLite executable '%s' not found in PATH or does not exist\n", *sqliteCmd)
+		fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
+		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
 		os.Exit(2) // Exit code 2 for command not found
 	}
 
@@ -90,12 +132,12 @@ func main() {
 
 	tempFileName := f.Name()
 
-	switch os.Args[1] {
+	switch operation {
 	case "smudge":
 		// Reads sql commands from stdin and writes
 		// the resulting binary sqlite3 database to stdout
 		f.Close()
-		cmd := exec.Command(sqliteCmd, tempFileName)
+		cmd := exec.Command(*sqliteCmd, tempFileName)
 		cmd.Stdin = os.Stdin
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
@@ -119,7 +161,7 @@ func main() {
 		f.Close()
 
 		// Run the SQLite command to dump the database
-		cmd := exec.Command(sqliteCmd, f.Name(), ".dump")
+		cmd := exec.Command(*sqliteCmd, f.Name(), ".dump")
 
 		// Create a pipe to capture and filter the output
 		cmdOut, err := cmd.StdoutPipe()
@@ -145,9 +187,5 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for clean operation: %v\n", err)
 			os.Exit(3)
 		}
-	default:
-		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", os.Args[1])
-		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge, version, location\n")
-		os.Exit(1) // Exit code 1 for invalid arguments
 	}
 }
