@@ -10,6 +10,14 @@ import (
 	"strings"
 )
 
+// Build-time variables
+var (
+	GitCommit = "unknown"
+	GitBranch = "unknown"
+	BuildTime = "unknown"
+	Version   = "dev"
+)
+
 // filterSqliteSequence filters out sqlite_sequence table creation and insertions
 // from SQLite dump output to make it more consistent with original SQL
 func filterSqliteSequence(input io.Reader, output io.Writer) error {
@@ -51,7 +59,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("gitsqlite executable location: %s\n", execPath)
+
+		fmt.Printf("gitsqlite version %s\n", Version)
+		fmt.Printf("Git commit: %s\n", GitCommit)
+		fmt.Printf("Git branch: %s\n", GitBranch)
+		fmt.Printf("Build time: %s\n", BuildTime)
+		fmt.Printf("Executable location: %s\n", execPath)
 		return
 	}
 

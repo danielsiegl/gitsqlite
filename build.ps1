@@ -19,6 +19,19 @@ function Build-GoApplication {
 
         Write-Output "Building for $env:GOOS"
         
+        # Get Git information for version
+        try {
+            $gitCommit = git rev-parse HEAD
+            $gitCommitShort = git rev-parse --short HEAD
+            $gitBranch = git rev-parse --abbrev-ref HEAD
+            $version = "1.0.0-$gitCommitShort"
+        } catch {
+            Write-Warning "Could not get Git information, using defaults"
+            $gitCommit = "unknown"
+            $gitBranch = "unknown"
+            $version = "dev"
+        }
+        
         # Determine output filename based on OS
         $outputFile = if ($GOOS -eq "windows") {
             "gitsqlite-$GOOS-$GOARCH.exe"
@@ -30,14 +43,22 @@ function Build-GoApplication {
             "gitsqlite-$GOOS-$GOARCH"
         }
 
-        # Build command with contract file if specified
-        $buildCmd = "go build -o $outputFile"
+        # Get build time in a format without spaces to avoid escaping issues
+        $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        
+        # Build ldflags with version information
+        $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
+        
         if ($ContractFile -ne "") {
-            $buildCmd += " -ldflags `"-X main.defaultContractFile=$ContractFile`""
+            $ldflagsString += " -X main.defaultContractFile=$ContractFile"
         }
         
-        # Perform the build
-        Invoke-Expression $buildCmd
+        Write-Output "Executing: go build -ldflags `"$ldflagsString`" -o `"$outputFile`""
+        & go build -ldflags $ldflagsString -o $outputFile
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Build failed with exit code $LASTEXITCODE"
+        }
         
         # Create bin directory if it doesn't exist
         $binDir = "bin"
