@@ -43,7 +43,7 @@ try {
     Read-Host "Press Enter to exit"
     exit 1
 }
-
+Read-Host "Press Enter to exit"
 Write-Host ""
 Write-Host "Running gitsqlite clean operation..." -ForegroundColor Green
 Write-Host "=====================================" -ForegroundColor Green
@@ -51,10 +51,12 @@ Write-Host "=====================================" -ForegroundColor Green
 try {
     if ($sqliteExe -eq "sqlite3") {
         Write-Host "Using gitsqlite with SQLite executable found in PATH" -ForegroundColor Yellow
-        Get-Content "sample.db" -Raw | & ".\gitsqlite.exe" clean
+        # Use cmd for proper binary file handling instead of PowerShell piping
+        cmd /c ".\gitsqlite.exe clean < sample.db"
     } else {
         Write-Host "Using gitsqlite with SQLite executable: $sqliteExe" -ForegroundColor Yellow
-        Get-Content "sample.db" -Raw | & ".\gitsqlite.exe" clean $sqliteExe
+        # Use cmd for proper binary file handling with custom SQLite path
+        cmd /c ".\gitsqlite.exe clean `"$sqliteExe`" < sample.db"
     }
     
     if ($LASTEXITCODE -ne 0) {
