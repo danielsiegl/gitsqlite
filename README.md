@@ -14,11 +14,57 @@ I couldn't get the `sqlite3` command line tool to directly read/write the binary
 
 Install via
 ```
-go install github.com/danielsiegl/gitsqlite@latest
+ 
 git config --global filter.gitsqlite.clean "gitsqlite clean"
 git config --global filter.gitsqlite.smudge "gitsqlite smudge"
 echo "*.db filter=gitsqlite" >> .gitattributes
 ```
+
+# Usage
+
+## Command Line Options
+
+The gitsqlite tool supports the following command-line options:
+
+```
+Usage: gitsqlite [options] <operation>
+
+Operations:
+  clean   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout)
+  smudge  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)
+
+Options:
+  -help
+        Show help information
+  -location
+        Show executable location and version information  
+  -sqlite string
+        Path to SQLite executable (default "sqlite3")
+  -version
+        Show version information
+```
+
+## Examples
+
+```bash
+# Basic operations (typically used by Git filters)
+gitsqlite clean < database.db > database.sql
+gitsqlite smudge < database.sql > database.db
+
+# Using custom SQLite path
+gitsqlite -sqlite /usr/local/bin/sqlite3 clean < database.db > database.sql
+
+# Show version information
+gitsqlite -version
+
+# Show version and executable location
+gitsqlite -location
+
+# Show help
+gitsqlite -help
+```
+
+For detailed examples and comprehensive usage instructions, see [example_clean.md](example_clean.md).
 
 ## SQLite Installation
 
@@ -26,16 +72,55 @@ If you don't have SQLite installed, you can install it via winget:
 ```
 winget install -e --id SQLite.SQLite
 ```
-
 Or use the provided installation scripts:
-- `install_sqlite.bat` - Installs SQLite and adds to PATH
-- `add_sqlite_to_path.bat` - Adds existing SQLite installation to PATH
-- `set_sqlite_session.bat` - Adds SQLite to current terminal session
+- `install_sqlite.ps1` - Installs SQLite and adds to PATH
 
 ## Custom SQLite Path
 
-If SQLite is not in your PATH, you can specify a custom path:
+If SQLite is not in your PATH, you can specify a custom path using the `-sqlite` flag:
+```bash
+git config --global filter.gitsqlite.clean "gitsqlite -sqlite /path/to/sqlite3 clean"
+git config --global filter.gitsqlite.smudge "gitsqlite -sqlite /path/to/sqlite3 smudge"
 ```
-git config --global filter.gitsqlite.clean "gitsqlite clean /path/to/sqlite3"
-git config --global filter.gitsqlite.smudge "gitsqlite smudge /path/to/sqlite3"
+
+### Windows Example
+```cmd
+git config --global filter.gitsqlite.clean "gitsqlite -sqlite C:\sqlite\sqlite3.exe clean"
+git config --global filter.gitsqlite.smudge "gitsqlite -sqlite C:\sqlite\sqlite3.exe smudge"
 ```
+
+### Linux/macOS Example  
+```bash
+git config --global filter.gitsqlite.clean "gitsqlite -sqlite /usr/local/bin/sqlite3 clean"
+git config --global filter.gitsqlite.smudge "gitsqlite -sqlite /usr/local/bin/sqlite3 smudge"
+```
+
+## Troubleshooting
+
+### Check Version and Location
+To verify which version of gitsqlite is being used by Git filters:
+```bash
+gitsqlite -version
+gitsqlite -location
+```
+
+### Test the Tool
+You can test the round-trip conversion manually:
+```bash
+# Test: SQL → Binary → SQL
+cat your_database.sql | gitsqlite smudge | gitsqlite clean > output.sql
+diff your_database.sql output.sql
+```
+
+For comprehensive testing, use the automated test suite:
+```powershell
+# Run the complete test suite including external file testing
+./test_roundtrip.ps1
+```
+
+See [example_clean.md](example_clean.md) for detailed testing instructions and examples.
+
+### Common Issues
+- **SQLite not found**: Use the `-sqlite` flag to specify the correct path
+- **Permission errors**: Ensure gitsqlite has write access to create temporary files
+- **Git filter not working**: Check that your `.gitattributes` file includes `*.db filter=gitsqlite`
