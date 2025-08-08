@@ -6,6 +6,8 @@ I want to store [sqlite3](https://sqlite.org) databases as SQL code in git rathe
 
 The afformentioned filters kind of works, but gives "file exists" errors due to reading and writing directly to the file that filters are not supposed to directly read nor write.
 
+Also the dump needs to be processed to standardize linebreaks to UNIX style and remove all traces of the 'sqlite_sequence' table - as this would alter the text output and the filter will not work as expected!
+
 # How
 
 I couldn't get the `sqlite3` command line tool to directly read/write the binary database from/to a pipe, so a temporary file is created and removed once no longer needed.
