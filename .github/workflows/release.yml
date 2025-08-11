@@ -180,11 +180,56 @@ jobs:
                 exit 1
             }
 
-        - name: Upload All Platform Binaries to Release
+        - name: Upload Linux AMD64 Binary
           uses: svenstaro/upload-release-action@2.9.0
           with:
             repo_token: ${{ secrets.GITHUB_TOKEN }}
-            file: bin/*
-            file_glob: true
+            file: bin/gitsqlite-linux-amd64
+            asset_name: gitsqlite-linux-amd64
+            tag: ${{ github.ref }}
+            overwrite: true
+
+        - name: Upload Linux ARM64 Binary
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/gitsqlite-linux-arm64
+            asset_name: gitsqlite-linux-arm64
+            tag: ${{ github.ref }}
+            overwrite: true
+
+        - name: Upload Windows AMD64 Binary
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/gitsqlite-windows-amd64.exe
+            asset_name: gitsqlite-windows-amd64.exe
+            tag: ${{ github.ref }}
+            overwrite: true
+
+        - name: Upload Windows ARM64 Binary
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/gitsqlite-windows-arm64.exe
+            asset_name: gitsqlite-windows-arm64.exe
+            tag: ${{ github.ref }}
+            overwrite: true
+
+        - name: Upload macOS AMD64 Binary
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/gitsqlite-macos-amd64
+            asset_name: gitsqlite-macos-amd64
+            tag: ${{ github.ref }}
+            overwrite: true
+
+        - name: Upload macOS ARM64 Binary
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/gitsqlite-macos-arm64
+            asset_name: gitsqlite-macos-arm64
             tag: ${{ github.ref }}
             overwrite: true
