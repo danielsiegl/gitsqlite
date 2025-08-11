@@ -35,10 +35,12 @@ print_header() {
 
 # Check if gitsqlite binary exists
 GITSQLITE_BIN=""
+ORIGINAL_DIR=$(pwd)
+
 if [ -f "./bin/gitsqlite-linux-amd64" ]; then
-    GITSQLITE_BIN="./bin/gitsqlite-linux-amd64"
+    GITSQLITE_BIN="$ORIGINAL_DIR/bin/gitsqlite-linux-amd64"
 elif [ -f "./gitsqlite" ]; then
-    GITSQLITE_BIN="./gitsqlite"
+    GITSQLITE_BIN="$ORIGINAL_DIR/gitsqlite"
 elif command -v gitsqlite &> /dev/null; then
     GITSQLITE_BIN="gitsqlite"
 else
