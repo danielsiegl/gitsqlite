@@ -12,6 +12,11 @@ Also the dump needs to be processed to standardize linebreaks to UNIX style and 
 
 I couldn't get the `sqlite3` command line tool to directly read/write the binary database from/to a pipe, so a temporary file is created and removed once no longer needed.
 
+# Latest binaries
+
+You can download the latest binaries for Windows/Linux and Mac from here:
+https://github.com/danielsiegl/gitsqlite/releases/latest/
+
 # Installation
 
 Install via
