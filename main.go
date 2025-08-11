@@ -26,6 +26,12 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 	writer := bufio.NewWriter(output)
 	defer writer.Flush()
 
+	// Increase the scanner buffer size to handle very long lines (default is 64KB)
+	// Set to 10MB to handle large INSERT statements or text fields
+	const maxCapacity = 10 * 1024 * 1024 // 10MB
+	buf := make([]byte, maxCapacity)
+	scanner.Buffer(buf, maxCapacity)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 
