@@ -68,9 +68,10 @@ jobs:
             - name: Upload Windows Binary to Release
               uses: svenstaro/upload-release-action@2.9.0
               with:
+                # default binary for windows.
                 repo_token: ${{ secrets.GITHUB_TOKEN }}
                 file: ./gitsqlite.exe
-                asset_name: gitsqlite-windows-amd64.exe
+                asset_name: gitsqlite.exe
                 tag: ${{ github.ref }}
                 overwrite: true
 
