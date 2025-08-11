@@ -14,7 +14,7 @@ GitSQLite includes automated test scripts to verify the roundtrip functionality 
 
 ### 🪟 Windows PowerShell Script
 
-**File**: `test_roundtrip.ps1`
+**File**: `scripts/test_roundtrip.ps1`
 
 #### Features
 - Native PowerShell implementation for Windows environments
@@ -26,16 +26,16 @@ GitSQLite includes automated test scripts to verify the roundtrip functionality 
 #### Usage
 ```powershell
 # Basic test
-.\test_roundtrip.ps1
+.\scripts\test_roundtrip.ps1
 
 # Show help
-.\test_roundtrip.ps1 -Help
+.\scripts\test_roundtrip.ps1 -Help
 
 # Keep test files for inspection
-.\test_roundtrip.ps1 -KeepFiles
+.\scripts\test_roundtrip.ps1 -KeepFiles
 
 # Verbose output
-.\test_roundtrip.ps1 -Verbose
+.\scripts\test_roundtrip.ps1 -Verbose
 ```
 
 #### Prerequisites
@@ -64,7 +64,7 @@ GitSQLite includes automated test scripts to verify the roundtrip functionality 
 
 ### 🐧 Linux/WSL Shell Script
 
-**File**: `test_roundtrip.sh`
+**File**: `scripts/test_roundtrip.sh`
 
 #### Features
 - Unified script with multiple operating modes
@@ -76,22 +76,22 @@ GitSQLite includes automated test scripts to verify the roundtrip functionality 
 #### Usage
 ```bash
 # Basic test
-./test_roundtrip.sh
+./scripts/test_roundtrip.sh
 
 # Quick test (minimal output)
-./test_roundtrip.sh -q
+./scripts/test_roundtrip.sh -q
 
 # Verbose test (detailed output + complex database)
-./test_roundtrip.sh -v
+./scripts/test_roundtrip.sh -v
 
 # Keep test files for inspection
-./test_roundtrip.sh -k
+./scripts/test_roundtrip.sh -k
 
 # Verbose + keep files
-./test_roundtrip.sh -v -k
+./scripts/test_roundtrip.sh -v -k
 
 # Show help
-./test_roundtrip.sh -h
+./scripts/test_roundtrip.sh -h
 ```
 
 #### Command Line Options
@@ -244,7 +244,7 @@ Both scripts perform comprehensive verification:
 
 #### "Permission denied"
 **Cause**: Script not executable (Linux/macOS)
-**Solution**: `chmod +x test_roundtrip.sh`
+**Solution**: `chmod +x scripts/test_roundtrip.sh`
 
 #### WSL Path Issues
 **Cause**: Windows/Linux path translation
@@ -266,13 +266,13 @@ Both scripts perform comprehensive verification:
 ### Local Development
 ```bash
 # Quick verification after code changes
-./test_roundtrip.sh
+./scripts/test_roundtrip.sh
 
 # Detailed testing before commits
-./test_roundtrip.sh -v
+./scripts/test_roundtrip.sh -v
 
 # Keep files for debugging
-./test_roundtrip.sh -v -k
+./scripts/test_roundtrip.sh -v -k
 ```
 
 ### CI/CD Integration
@@ -282,17 +282,17 @@ The scripts can be integrated into automated testing pipelines:
 # GitHub Actions example
 - name: Run Roundtrip Tests
   run: |
-    chmod +x test_roundtrip.sh
-    ./test_roundtrip.sh -v
+    chmod +x scripts/test_roundtrip.sh
+    ./scripts/test_roundtrip.sh -v
 ```
 
 ### Cross-Platform Testing
 ```bash
 # Test Linux binary on WSL
-wsl ./test_roundtrip.sh -v
+wsl ./scripts/test_roundtrip.sh -v
 
 # Test Windows binary
-.\test_roundtrip.ps1 -Verbose
+.\scripts\test_roundtrip.ps1 -Verbose
 ```
 
 ---

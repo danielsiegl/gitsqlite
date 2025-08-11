@@ -22,7 +22,7 @@ jobs:
         cache: false
 
     - name: Build
-      run: ./build.ps1
+      run: ./scripts/build.ps1
     
     - name: Upload binary Artifacts
       uses: actions/upload-artifact@v4

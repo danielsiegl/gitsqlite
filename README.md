@@ -75,7 +75,7 @@ If you don't have SQLite installed, you can install it via winget:
 winget install -e --id SQLite.SQLite
 ```
 Or use the provided installation scripts:
-- `install_sqlite.ps1` - Installs SQLite and adds to PATH
+- `scripts/install_sqlite.ps1` - Installs SQLite and adds to PATH
 
 ## Custom SQLite Path
 
@@ -117,10 +117,10 @@ diff your_database.sql output.sql
 For comprehensive testing, use the automated test suite:
 ```powershell
 # Run the complete test suite including external file testing
-./test_roundtrip.ps1
+./scripts/test_roundtrip.ps1
 ```
 
-See [example_clean.md](example_clean.md) for detailed testing instructions and examples.
+See [example_clean.md](examples.md) for detailed testing instructions and examples.
 
 ### Common Issues
 - **SQLite not found**: Use the `-sqlite` flag to specify the correct path
