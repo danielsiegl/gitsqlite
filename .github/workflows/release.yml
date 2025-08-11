@@ -20,9 +20,10 @@ jobs:
               uses: dhkatz/get-version-action@v3.0.0
 
             - name: Set up Go
-              uses: actions/setup-go@v3
+              uses: actions/setup-go@v4
               with:
-                go-version: 1.24
+                go-version: '1.24'
+                cache: false
 
             - name: Build Release Binary
               shell: pwsh
@@ -44,15 +45,18 @@ jobs:
                 Write-Host "Version: $version" -ForegroundColor Cyan
                 
                 # Build with ldflags to set version information
-                $ldflags = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
+                $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
                 
                 Write-Host ""
-                Write-Host "Building executable with GitHub Actions context..." -ForegroundColor Green
-                go build -ldflags $ldflags -o gitsqlite.exe
+                Write-Host "Building Windows executable with GitHub Actions context..." -ForegroundColor Green
+                Write-Host "Executing: go build -ldflags `"$ldflagsString`" -o gitsqlite.exe" -ForegroundColor Gray
+                & go build -ldflags $ldflagsString -o gitsqlite.exe
                 
                 # Verify the build was successful
                 if ($LASTEXITCODE -eq 0 -and (Test-Path "gitsqlite.exe")) {
                     Write-Host "✓ Build successful - gitsqlite.exe created" -ForegroundColor Green
+                    $fileSize = [math]::Round((Get-Item "gitsqlite.exe").Length / 1MB, 2)
+                    Write-Host "File size: $fileSize MB" -ForegroundColor Cyan
                     Write-Host ""
                     Write-Host "Testing version output:" -ForegroundColor Yellow
                     .\gitsqlite.exe -version
@@ -61,12 +65,126 @@ jobs:
                     exit 1
                 }
 
-            - name: Upload binaries to release
+            - name: Upload Windows Binary to Release
               uses: svenstaro/upload-release-action@2.9.0
               with:
                 repo_token: ${{ secrets.GITHUB_TOKEN }}
                 file: ./gitsqlite.exe
-                asset_name: gitsqlite.exe
+                asset_name: gitsqlite-windows-amd64.exe
                 tag: ${{ github.ref }}
                 overwrite: true
 
+    buildallplatforms:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        
+        steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 0 # Mandatory to use the extract version from tag action
+        
+        - name: Extract version from tag
+          id: get_version
+          uses: dhkatz/get-version-action@v3.0.0
+
+        - name: Set up Go
+          uses: actions/setup-go@v4
+          with:
+            go-version: '1.24'
+            cache: false
+
+        - name: Build All Platforms
+          shell: pwsh
+          run: |
+            Write-Host "Building all platforms with version: ${{ steps.get_version.outputs.version }}" -ForegroundColor Green
+            
+            # Get Git information for GitHub Actions context
+            $gitCommit = git rev-parse HEAD
+            $gitCommitShort = git rev-parse --short HEAD
+            $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
+            $releaseTag = "${{ steps.get_version.outputs.version }}"
+            $gitBranch = "$repoUrl/releases/tag/$releaseTag"
+            $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            $version = "${{ steps.get_version.outputs.version }}-$gitCommitShort"
+            
+            Write-Host "Git commit: $gitCommitShort ($gitCommit)" -ForegroundColor Cyan
+            Write-Host "Git branch: $gitBranch" -ForegroundColor Cyan
+            Write-Host "Build time: $buildTime" -ForegroundColor Cyan
+            Write-Host "Version: $version" -ForegroundColor Cyan
+            
+            # Create bin directory
+            $binDir = "bin"
+            if (-not (Test-Path -Path $binDir)) {
+                New-Item -ItemType Directory -Path $binDir | Out-Null
+                Write-Host "Created bin directory" -ForegroundColor Green
+            }
+            
+            # Build function integrated from build.ps1
+            function Build-Platform {
+                param (
+                    [string]$GOOS,
+                    [string]$GOARCH = "amd64"
+                )
+                
+                Write-Host "Building for $GOOS-$GOARCH..." -ForegroundColor Yellow
+                
+                # Determine output filename based on OS
+                $outputFile = if ($GOOS -eq "windows") {
+                    "gitsqlite-$GOOS-$GOARCH.exe"
+                } elseif ($GOOS -eq "darwin") {
+                    "gitsqlite-macos-$GOARCH"
+                } else {
+                    "gitsqlite-$GOOS-$GOARCH"
+                }
+                
+                # Build ldflags with version information
+                $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
+                
+                # Set environment variables and build
+                $env:GOOS = $GOOS
+                $env:GOARCH = $GOARCH
+                $env:CGO_ENABLED = "0"
+                
+                Write-Host "Executing: go build -ldflags `"$ldflagsString`" -o `"$outputFile`"" -ForegroundColor Gray
+                & go build -ldflags $ldflagsString -o $outputFile
+                
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Build failed for $GOOS-$GOARCH with exit code $LASTEXITCODE"
+                }
+                
+                # Move to bin directory
+                Move-Item -Path $outputFile -Destination $binDir -Force
+                Write-Host "✓ Built and moved to bin directory: $binDir/$outputFile" -ForegroundColor Green
+            }
+            
+            # Build for all platforms
+            try {
+                Build-Platform -GOOS "linux" -GOARCH "amd64"
+                Build-Platform -GOOS "linux" -GOARCH "arm64"
+                Build-Platform -GOOS "windows" -GOARCH "amd64"
+                Build-Platform -GOOS "windows" -GOARCH "arm64"
+                Build-Platform -GOOS "darwin" -GOARCH "amd64"
+                Build-Platform -GOOS "darwin" -GOARCH "arm64"
+                
+                Write-Host "✓ All builds completed successfully!" -ForegroundColor Green
+                
+                # List all built files
+                Write-Host "`nBuilt files:" -ForegroundColor Cyan
+                Get-ChildItem -Path $binDir | ForEach-Object {
+                    $size = [math]::Round($_.Length / 1MB, 2)
+                    Write-Host "  $($_.Name) ($size MB)" -ForegroundColor White
+                }
+            } catch {
+                Write-Host "✗ Build failed: $($_.Exception.Message)" -ForegroundColor Red
+                exit 1
+            }
+
+        - name: Upload All Platform Binaries to Release
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/*
+            file_glob: true
+            tag: ${{ github.ref }}
+            overwrite: true
