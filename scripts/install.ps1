@@ -18,6 +18,13 @@ if (-not ($env:PATH -split ';' | Where-Object { $_ -eq $BinDir })) {
     }
 }
 
+# Check if winget is installed
+if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Host "ERROR: winget is not installed. Please install 'App Installer' from the Microsoft Store and try again." -ForegroundColor Red
+    Write-Host "You can download it from: https://apps.microsoft.com/store/detail/app-installer/9NBLGGH4NNS1" -ForegroundColor Yellow
+    exit 1
+}
+
 # Install SQLite 3 via winget if not present
 Write-Host "Checking for sqlite3..." -ForegroundColor Yellow
 if (-not (Get-Command sqlite3 -ErrorAction SilentlyContinue)) {
