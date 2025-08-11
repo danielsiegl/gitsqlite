@@ -1,0 +1,7 @@
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE employees (id INTEGER PRIMARY KEY, name TEXT, salary REAL);
+INSERT INTO employees VALUES(1,'Alice',50000.0);
+INSERT INTO employees VALUES(2,'Bob',60000.0);
+INSERT INTO employees VALUES(3,'Charlie',55000.0);
+COMMIT;
