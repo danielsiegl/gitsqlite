@@ -37,7 +37,9 @@ jobs:
                 $releaseTag = "${{ steps.get_version.outputs.version }}"
                 $gitBranch = "$repoUrl/releases/tag/$releaseTag"
                 $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-                $version = "${{ steps.get_version.outputs.version }}-$gitCommitShort"
+                # Remove 'v' prefix from version if present
+                $versionClean = "${{ steps.get_version.outputs.version }}".TrimStart('v')
+                $version = "$versionClean-$gitCommitShort"
                 
                 Write-Host "Git commit: $gitCommitShort ($gitCommit)" -ForegroundColor Cyan
                 Write-Host "Git branch: $gitBranch" -ForegroundColor Cyan
@@ -107,7 +109,9 @@ jobs:
             $releaseTag = "${{ steps.get_version.outputs.version }}"
             $gitBranch = "$repoUrl/releases/tag/$releaseTag"
             $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            $version = "${{ steps.get_version.outputs.version }}-$gitCommitShort"
+            # Remove 'v' prefix from version if present
+            $versionClean = "${{ steps.get_version.outputs.version }}".TrimStart('v')
+            $version = "$versionClean-$gitCommitShort"
             
             Write-Host "Git commit: $gitCommitShort ($gitCommit)" -ForegroundColor Cyan
             Write-Host "Git branch: $gitBranch" -ForegroundColor Cyan
