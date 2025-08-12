@@ -123,6 +123,7 @@ func main() {
 	// Define flags
 	var (
 		showVersion = flag.Bool("version", false, "Show version information")
+		checkSqlite = flag.Bool("sqlite-version", false, "Check if SQLite is available and show its version")
 		sqliteCmd   = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
 		showHelp    = flag.Bool("help", false, "Show help information")
 	)
@@ -164,6 +165,33 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("Executable location: %s\n", execPath)
+		return
+	}
+
+	// Handle sqlite-version flag
+	if *checkSqlite {
+		fmt.Printf("Checking SQLite availability...\n")
+
+		// Check if sqlite executable exists
+		sqlitePath, err := exec.LookPath(*sqliteCmd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: SQLite executable '%s' not found in PATH\n", *sqliteCmd)
+			fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
+			os.Exit(2)
+		}
+
+		fmt.Printf("SQLite found at: %s\n", sqlitePath)
+
+		// Get SQLite version
+		cmd := exec.Command(*sqliteCmd, "-version")
+		output, err := cmd.Output()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Error getting SQLite version: %v\n", err)
+			os.Exit(3)
+		}
+
+		version := strings.TrimSpace(string(output))
+		fmt.Printf("SQLite version: %s\n", version)
 		return
 	}
 
