@@ -11,8 +11,10 @@ gitsqlite [options] <operation>
 
 ### Options
 - `-sqlite <path>`: Path to sqlite3 executable (default: "sqlite3")
+- `-log`: Enable logging to file in current directory  
+- `-log-dir <dir>`: Log to specified directory instead of current directory
+- `-sqlite-version`: Check if SQLite is available and show its version
 - `-version`: Show version information
-- `-location`: Show executable location and version information
 - `-help`: Show help information
 
 ### Operations
@@ -61,6 +63,25 @@ INSERT INTO users VALUES(2,'Jane Smith','jane@example.com');
 COMMIT;
 ```
 
+### With Logging Enabled
+```bash
+# Enable logging to current directory
+./gitsqlite -log clean < sample.db
+
+# Enable logging to specific directory
+mkdir logs
+./gitsqlite -log-dir ./logs clean < sample.db
+```
+
+When logging is enabled, the operation works the same but creates detailed log files:
+- Log files are named with timestamps and unique IDs: `gitsqlite_20250812T133102.684Z_12188_uuid.log`
+- Logs contain JSON-structured information about the operation
+- Useful for debugging Git filter issues
+
+**Important**: Flags must come before the operation:
+- ✅ Correct: `./gitsqlite -log clean < sample.db`
+- ❌ Wrong: `./gitsqlite clean -log < sample.db`
+
 ## Smudge Operation Examples
 
 The "smudge" operation reads SQL commands from stdin and outputs a binary SQLite database to stdout.
@@ -104,11 +125,60 @@ EOF
 sqlite3 sample.db "SELECT * FROM users;"
 ```
 
+### With Logging Enabled
+```bash
+# Enable logging for smudge operation
+./gitsqlite -log smudge < sample.sql > sample.db
+
+# With custom log directory
+./gitsqlite -log-dir ./logs smudge < sample.sql > sample.db
+```
+
 ### Expected Smudge Output
 The smudge operation creates a binary SQLite database file that can be queried normally:
 ```
 1|John Doe|john@example.com
 2|Jane Smith|jane@example.com
+```
+
+## SQLite Version Checking
+
+Before using gitsqlite, you can verify that SQLite is properly installed and accessible:
+
+### Check Default SQLite Installation
+```bash
+# Check if SQLite is available and show version
+./gitsqlite -sqlite-version
+```
+
+Expected output:
+```
+Checking SQLite availability...
+SQLite found at: /usr/bin/sqlite3
+SQLite version: 3.39.4 2022-09-29 15:55:41 ...
+```
+
+### Check Custom SQLite Path
+```bash
+# Check specific SQLite installation
+./gitsqlite -sqlite /usr/local/bin/sqlite3 -sqlite-version
+
+# On Windows
+./gitsqlite -sqlite "C:\sqlite\sqlite3.exe" -sqlite-version
+```
+
+### Troubleshooting SQLite Issues
+If you get "SQLite executable not found" errors:
+
+1. Check if SQLite is installed:
+```bash
+./gitsqlite -sqlite-version
+```
+
+2. If not found, install SQLite or specify the correct path:
+```bash
+# Use custom path
+./gitsqlite -sqlite /path/to/sqlite3 clean < sample.db
 ```
 
 ## Round-trip Testing
