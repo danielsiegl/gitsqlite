@@ -75,24 +75,54 @@ func getWinGetSQLitePaths() []string {
 
 	paths := []string{}
 
-	// Get user profile directory
+	// Common SQLite package directory patterns
+	sqlitePatterns := []string{
+		"SQLite.SQLite_Microsoft.Winget.Source_*",
+		"SQLite.SQLite_*",
+	}
+
+	// 1. User-level installation (non-elevated)
 	userProfile := os.Getenv("USERPROFILE")
 	if userProfile != "" {
-		// WinGet installs SQLite to user's local packages directory
-		wingetPath := filepath.Join(userProfile, "AppData", "Local", "Microsoft", "WinGet", "Packages")
-
-		// Common SQLite package directory patterns
-		sqlitePatterns := []string{
-			"SQLite.SQLite_Microsoft.Winget.Source_*",
-			"SQLite.SQLite_*",
-		}
+		userWinGetPath := filepath.Join(userProfile, "AppData", "Local", "Microsoft", "WinGet", "Packages")
 
 		for _, pattern := range sqlitePatterns {
-			fullPattern := filepath.Join(wingetPath, pattern)
+			fullPattern := filepath.Join(userWinGetPath, pattern)
 			matches, err := filepath.Glob(fullPattern)
 			if err == nil {
 				for _, match := range matches {
-					// Only look for sqlite3.exe
+					paths = append(paths, filepath.Join(match, "sqlite3.exe"))
+				}
+			}
+		}
+	}
+
+	// 2. System-level installation (elevated/admin)
+	programFiles := os.Getenv("ProgramFiles")
+	if programFiles != "" {
+		systemWinGetPath := filepath.Join(programFiles, "WinGet", "Packages")
+
+		for _, pattern := range sqlitePatterns {
+			fullPattern := filepath.Join(systemWinGetPath, pattern)
+			matches, err := filepath.Glob(fullPattern)
+			if err == nil {
+				for _, match := range matches {
+					paths = append(paths, filepath.Join(match, "sqlite3.exe"))
+				}
+			}
+		}
+	}
+
+	// 3. Alternative system location (some versions use this)
+	programData := os.Getenv("ProgramData")
+	if programData != "" {
+		altSystemWinGetPath := filepath.Join(programData, "Microsoft", "WinGet", "Packages")
+
+		for _, pattern := range sqlitePatterns {
+			fullPattern := filepath.Join(altSystemWinGetPath, pattern)
+			matches, err := filepath.Glob(fullPattern)
+			if err == nil {
+				for _, match := range matches {
 					paths = append(paths, filepath.Join(match, "sqlite3.exe"))
 				}
 			}
