@@ -1,4 +1,4 @@
-﻿PRAGMA foreign_keys=OFF;
+PRAGMA foreign_keys=OFF;
 BEGIN TRANSACTION;
 CREATE TABLE t_attribute
 (
