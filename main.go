@@ -102,6 +102,23 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 	return nil
 }
 
+// checkStdinAvailable checks if there's data available on stdin
+// Returns true if data is available, false if stdin is empty or unavailable
+func checkStdinAvailable() bool {
+	// Check if stdin is a terminal (interactive mode)
+	if fileInfo, err := os.Stdin.Stat(); err == nil {
+		// If it's a character device (terminal), no piped input
+		if (fileInfo.Mode() & os.ModeCharDevice) != 0 {
+			return false
+		}
+		// If size is 0, no data available
+		if fileInfo.Size() == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func main() {
 	// Define flags
 	var (
@@ -174,6 +191,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
 		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
 		os.Exit(2) // Exit code 2 for command not found
+	}
+
+	// Check if stdin has data available
+	if !checkStdinAvailable() {
+		fmt.Fprintf(os.Stderr, "Error: No input provided via stdin\n")
+		fmt.Fprintf(os.Stderr, "The %s operation requires input data via stdin\n", operation)
+		fmt.Fprintf(os.Stderr, "Example: %s %s < input_file\n", os.Args[0], operation)
+		os.Exit(4) // Exit code 4 for no input data
 	}
 
 	f, err := os.CreateTemp("", "gitsqlite-*.db")
