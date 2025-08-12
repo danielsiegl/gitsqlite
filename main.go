@@ -28,7 +28,7 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 
 	var lineBuffer strings.Builder
 	const chunkSize = 4096 // 4KB chunks for processing
-	
+
 	for {
 		chunk := make([]byte, chunkSize)
 		n, err := reader.Read(chunk)
@@ -41,33 +41,33 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 			}
 			continue
 		}
-		
+
 		// Process the chunk character by character
 		for i := 0; i < n; i++ {
 			char := chunk[i]
-			
+
 			if char == '\n' || char == '\r' {
 				// End of line found, process the accumulated line
 				if lineBuffer.Len() > 0 {
 					line := lineBuffer.String()
 					lineBuffer.Reset()
-					
+
 					// Skip sqlite_sequence table creation
 					if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
 						continue
 					}
-					
+
 					// Skip sqlite_sequence insertions
 					if strings.Contains(line, "INSERT INTO sqlite_sequence VALUES") {
 						continue
 					}
-					
+
 					// Write the line if it's not filtered out - use Unix line endings for consistency
 					if _, writeErr := writer.WriteString(line + "\n"); writeErr != nil {
 						return writeErr
 					}
 				}
-				
+
 				// Skip \r in \r\n sequences
 				if char == '\r' && i+1 < n && chunk[i+1] == '\n' {
 					i++ // Skip the following \n
@@ -77,7 +77,7 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 				lineBuffer.WriteByte(char)
 			}
 		}
-		
+
 		if err == io.EOF {
 			break
 		}
@@ -85,30 +85,29 @@ func filterSqliteSequence(input io.Reader, output io.Writer) error {
 			return err
 		}
 	}
-	
+
 	// Process any remaining content in the buffer
 	if lineBuffer.Len() > 0 {
 		line := lineBuffer.String()
-		
+
 		// Skip sqlite_sequence table creation
 		if !strings.Contains(line, "CREATE TABLE sqlite_sequence") &&
-		   !strings.Contains(line, "INSERT INTO sqlite_sequence VALUES") {
+			!strings.Contains(line, "INSERT INTO sqlite_sequence VALUES") {
 			if _, err := writer.WriteString(line + "\n"); err != nil {
 				return err
 			}
 		}
 	}
-	
+
 	return nil
 }
 
 func main() {
 	// Define flags
 	var (
-		showVersion  = flag.Bool("version", false, "Show version information")
-		showLocation = flag.Bool("location", false, "Show executable location and version information")
-		sqliteCmd    = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
-		showHelp     = flag.Bool("help", false, "Show help information")
+		showVersion = flag.Bool("version", false, "Show version information")
+		sqliteCmd   = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
+		showHelp    = flag.Bool("help", false, "Show help information")
 	)
 
 	// Custom usage function
@@ -134,21 +133,20 @@ func main() {
 		return
 	}
 
-	// Handle version/location flags
-	if *showVersion || *showLocation {
+	// Handle version flag
+	if *showVersion {
 		fmt.Printf("gitsqlite version %s\n", Version)
 		fmt.Printf("Git commit: %s\n", GitCommit)
 		fmt.Printf("Git branch: %s\n", GitBranch)
 		fmt.Printf("Build time: %s\n", BuildTime)
 
-		if *showLocation {
-			execPath, err := os.Executable()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("Executable location: %s\n", execPath)
+		// Always show executable location with version
+		execPath, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
+			os.Exit(1)
 		}
+		fmt.Printf("Executable location: %s\n", execPath)
 		return
 	}
 
