@@ -142,8 +142,8 @@ func setupLogging(logDir string) (*slog.Logger, func()) {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to create log file %s: %v\n", fn, err)
 			w = os.Stderr
 		} else {
-			// Write to both stderr and file, but never to stdout
-			w = io.MultiWriter(os.Stderr, f)
+			// Write ONLY to file, not to stderr
+			w = f
 			cleanup = func() {
 				f.Sync() // Force flush before closing
 				f.Close()
