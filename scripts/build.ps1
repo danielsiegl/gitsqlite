@@ -1,21 +1,21 @@
+# GitSQLite build script
+# this script is used by main.yml on GitHub Actions
+# It also can be used locally to build the application for all platforms
+
 function Build-GoApplication {
     param (
         [string]$GOOS,
-        [string]$GOARCH = "amd64",
-        [string]$CGO_ENABLED = "0",
-        [string]$ContractFile = ""
+        [string]$GOARCH = "amd64"
     )
 
     # Store original environment variables
     $originalGOOS = $env:GOOS
     $originalGOARCH = $env:GOARCH
-    $originalCGO_ENABLED = $env:CGO_ENABLED
 
     try {
         # Set environment variables for build
         $env:GOOS = $GOOS
         $env:GOARCH = $GOARCH
-        $env:CGO_ENABLED = $CGO_ENABLED
 
         Write-Output "Building for $env:GOOS"
         
@@ -24,7 +24,7 @@ function Build-GoApplication {
             $gitCommit = git rev-parse HEAD
             $gitCommitShort = git rev-parse --short HEAD
             $gitBranch = git rev-parse --abbrev-ref HEAD
-            $version = "1.0.0-$gitCommitShort"
+            $version = "dev-$gitCommitShort"
         } catch {
             Write-Warning "Could not get Git information, using defaults"
             $gitCommit = "unknown"
@@ -49,9 +49,6 @@ function Build-GoApplication {
         # Build ldflags with version information
         $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
         
-        if ($ContractFile -ne "") {
-            $ldflagsString += " -X main.defaultContractFile=$ContractFile"
-        }
         
         Write-Output "Executing: go build -ldflags `"$ldflagsString`" -o `"$outputFile`""
         & go build -ldflags $ldflagsString -o $outputFile
@@ -81,7 +78,6 @@ function Build-GoApplication {
         # Restore original environment variables
         $env:GOOS = $originalGOOS
         $env:GOARCH = $originalGOARCH
-        $env:CGO_ENABLED = $originalCGO_ENABLED
     }
 }
 
