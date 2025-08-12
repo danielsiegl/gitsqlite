@@ -1,3 +1,12 @@
+// Package sqlite provides SQLite database operations with enhanced binary detection.
+//
+// This package automatically detects SQLite binaries from multiple sources:
+// - Standard PATH lookup
+// - Windows: WinGet package manager locations (user and system installations)
+// - Linux: Standard apt installation paths (/usr/bin, /usr/local/bin, etc.)
+//
+// The enhanced detection ensures SQLite binaries are found even when they're
+// installed via package managers but not in the current PATH.
 package sqlite
 
 import (
@@ -18,7 +27,7 @@ type Engine struct {
 
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
 	// Use enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithWinGet()
+	binaryPath, err := e.GetPathWithPackageManager()
 	if err != nil {
 		return fmt.Errorf("SQLite binary not found: %w", err)
 	}
@@ -30,7 +39,7 @@ func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) erro
 
 func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
 	// Use enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithWinGet()
+	binaryPath, err := e.GetPathWithPackageManager()
 	if err != nil {
 		return fmt.Errorf("SQLite binary not found: %w", err)
 	}
@@ -40,16 +49,16 @@ func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
 	return cmd.Run()
 }
 
-// ValidateBinary checks if the SQLite binary is available and accessible, including WinGet locations on Windows
+// ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
-	_, err := e.GetPathWithWinGet()
+	_, err := e.GetPathWithPackageManager()
 	return err
 }
 
 // GetVersion returns the version of the SQLite binary, using enhanced path lookup
 func (e *Engine) GetVersion() (string, error) {
 	// Use the enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithWinGet()
+	binaryPath, err := e.GetPathWithPackageManager()
 	if err != nil {
 		return "", err
 	}
@@ -65,6 +74,21 @@ func (e *Engine) GetVersion() (string, error) {
 // GetPath returns the full path to the SQLite binary
 func (e *Engine) GetPath() (string, error) {
 	return exec.LookPath(e.Bin)
+}
+
+// getLinuxAptSQLitePaths returns common apt SQLite installation paths on Linux
+func getLinuxAptSQLitePaths() []string {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	// Common locations where apt installs sqlite3
+	return []string{
+		"/usr/bin/sqlite3",
+		"/usr/local/bin/sqlite3",
+		"/bin/sqlite3",
+		"/usr/sbin/sqlite3",
+	}
 }
 
 // getWinGetSQLitePaths returns common WinGet SQLite installation paths on Windows
@@ -132,6 +156,26 @@ func getWinGetSQLitePaths() []string {
 	return paths
 }
 
+// findSQLiteInApt searches for SQLite in apt installation directories
+func (e *Engine) findSQLiteInApt() (string, error) {
+	if runtime.GOOS != "linux" {
+		return "", fmt.Errorf("apt search only available on Linux")
+	}
+
+	paths := getLinuxAptSQLitePaths()
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			// Test if the executable works
+			cmd := exec.Command(path, "-version")
+			if err := cmd.Run(); err == nil {
+				return path, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("SQLite not found in standard apt installation directories")
+}
+
 // findSQLiteInWinGet searches for SQLite in WinGet installation directories
 func (e *Engine) findSQLiteInWinGet() (string, error) {
 	if runtime.GOOS != "windows" {
@@ -152,32 +196,44 @@ func (e *Engine) findSQLiteInWinGet() (string, error) {
 	return "", fmt.Errorf("SQLite not found in WinGet installation directories")
 }
 
-// GetPathWithWinGet returns the full path to the SQLite binary, checking WinGet locations on Windows
-func (e *Engine) GetPathWithWinGet() (string, error) {
+// GetPathWithPackageManager returns the full path to the SQLite binary, checking package manager locations
+func (e *Engine) GetPathWithPackageManager() (string, error) {
 	// First try the standard PATH lookup
 	path, err := exec.LookPath(e.Bin)
 	if err == nil {
 		return path, nil
 	}
 
-	// On Windows, if standard lookup fails and we're looking for sqlite3, check WinGet locations
-	if runtime.GOOS == "windows" && e.Bin == "sqlite3" {
-		wingetPath, wingetErr := e.findSQLiteInWinGet()
-		if wingetErr == nil {
-			return wingetPath, nil
+	// Platform-specific fallback searches for sqlite3
+	if e.Bin == "sqlite3" {
+		var fallbackPath string
+		var fallbackErr error
+
+		switch runtime.GOOS {
+		case "windows":
+			fallbackPath, fallbackErr = e.findSQLiteInWinGet()
+		case "linux":
+			fallbackPath, fallbackErr = e.findSQLiteInApt()
+		default:
+			// For other platforms, return the original PATH error
+			return "", err
+		}
+
+		if fallbackErr == nil {
+			return fallbackPath, nil
 		}
 
 		// Return combined error message
-		return "", fmt.Errorf("SQLite executable '%s' not found in PATH or WinGet locations. PATH error: %v. WinGet search error: %v", e.Bin, err, wingetErr)
+		return "", fmt.Errorf("SQLite executable '%s' not found in PATH or package manager locations. PATH error: %v. Package manager search error: %v", e.Bin, err, fallbackErr)
 	}
 
-	// For non-Windows or non-sqlite3 binary names, return original error
+	// For non-sqlite3 binary names, return original error
 	return "", err
 }
 
 // CheckAvailability performs a comprehensive check of SQLite availability and returns detailed information
 func (e *Engine) CheckAvailability() (path string, version string, err error) {
-	path, err = e.GetPathWithWinGet()
+	path, err = e.GetPathWithPackageManager()
 	if err != nil {
 		return "", "", err
 	}
