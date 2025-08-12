@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/danielsiegl/gitsqlite/internal/filters"
 	"github.com/danielsiegl/gitsqlite/internal/logging"
@@ -101,27 +99,18 @@ func main() {
 		logger.Info("checking sqlite availability", "sqlite_cmd", *sqliteCmd)
 		fmt.Printf("Checking SQLite availability...\n")
 
-		sqlitePath, err := exec.LookPath(*sqliteCmd)
+		engine := &sqlite.Engine{Bin: *sqliteCmd}
+		sqlitePath, version, err := engine.CheckAvailability()
 		if err != nil {
-			logger.Error("sqlite executable not found", "sqlite_cmd", *sqliteCmd, "error", err)
+			logger.Error("sqlite availability check failed", "sqlite_cmd", *sqliteCmd, "error", err)
 			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "ERROR: SQLite executable '%s' not found in PATH\n", *sqliteCmd)
+			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 			fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
 			os.Exit(2)
 		}
 		fmt.Printf("SQLite found at: %s\n", sqlitePath)
-		logger.Info("sqlite found", "path", sqlitePath)
-
-		cmd := exec.Command(*sqliteCmd, "-version")
-		output, err := cmd.Output()
-		if err != nil {
-			logger.Error("failed to get sqlite version", "sqlite_cmd", *sqliteCmd, "error", err)
-			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "ERROR: Error getting SQLite version: %v\n", err)
-			os.Exit(3)
-		}
-		fmt.Printf("SQLite version: %s\n", strings.TrimSpace(string(output)))
-		logger.Info("sqlite version check completed", "version", strings.TrimSpace(string(output)), "path", sqlitePath)
+		fmt.Printf("SQLite version: %s\n", version)
+		logger.Info("sqlite availability check completed", "version", version, "path", sqlitePath)
 		return
 	}
 
@@ -142,10 +131,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
 		os.Exit(1)
 	}
-	logger.Info("operation specified", "operation", op, "sqlite_cmd", *sqliteCmd)
+	ctx := context.Background()
+	engine := &sqlite.Engine{Bin: *sqliteCmd}
 
-	// sqlite binary available?
-	if _, err := exec.LookPath(*sqliteCmd); err != nil {
+	// Validate sqlite binary is available
+	if err := engine.ValidateBinary(); err != nil {
 		logger.Error("sqlite executable not accessible", "sqlite_cmd", *sqliteCmd, "error", err)
 		cleanup() // Ensure log is flushed before exit
 		fmt.Fprintf(os.Stderr, "Error: SQLite executable '%s' not found in PATH or does not exist\n", *sqliteCmd)
@@ -153,19 +143,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
 		os.Exit(2)
 	}
-
-	// stdin must be present
-	if !checkStdinAvailable() {
-		logger.Error("no stdin data available", "operation", op)
-		cleanup() // Ensure log is flushed before exit
-		fmt.Fprintf(os.Stderr, "Error: No input provided via stdin\n")
-		fmt.Fprintf(os.Stderr, "The %s operation requires input data via stdin\n", op)
-		fmt.Fprintf(os.Stderr, "Example: %s %s < input_file\n", filepath.Base(os.Args[0]), op)
-		os.Exit(4)
-	}
-
-	ctx := context.Background()
-	engine := &sqlite.Engine{Bin: *sqliteCmd}
 
 	switch op {
 	case "smudge":
