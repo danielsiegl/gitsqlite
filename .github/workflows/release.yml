@@ -5,111 +5,6 @@ on:
       types: [created]
  
 jobs:
-    BuildAndRelease:
-        runs-on: windows-latest
-        timeout-minutes: 15
-
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
-              with:
-                fetch-depth: 0 # Mandatory to use the extract version from tag action
-        
-            - name: Extract version from tag
-              id: get_version
-              uses: dhkatz/get-version-action@v3.0.0
-
-            - name: Set up Go
-              uses: actions/setup-go@v4
-              with:
-                go-version: '1.24'
-                cache: false
-
-            - name: Build Release Binary
-              shell: pwsh
-              run: |
-                Write-Host "Building release binary with version: ${{ steps.get_version.outputs.version }}" -ForegroundColor Green
-                
-                # Get Git information for GitHub Actions context
-                $gitCommit = git rev-parse HEAD
-                $gitCommitShort = git rev-parse --short HEAD
-                $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
-                $releaseTag = "${{ steps.get_version.outputs.version }}"
-                $gitBranch = "$repoUrl/releases/tag/$releaseTag"
-                $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-                # Remove 'v' prefix from version if present
-                $versionClean = "${{ steps.get_version.outputs.version }}".TrimStart('v')
-                $version = "$versionClean-$gitCommitShort"
-                
-                Write-Host "Git commit: $gitCommitShort ($gitCommit)" -ForegroundColor Cyan
-                Write-Host "Git branch: $gitBranch" -ForegroundColor Cyan
-                Write-Host "Build time: $buildTime" -ForegroundColor Cyan
-                Write-Host "Version: $version" -ForegroundColor Cyan
-                
-                # Build with ldflags to set version information
-                $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
-                
-                Write-Host ""
-                Write-Host "Building Windows executable with GitHub Actions context..." -ForegroundColor Green
-                Write-Host "Executing: go build -ldflags `"$ldflagsString`" -o gitsqlite.exe" -ForegroundColor Gray
-                & go build -ldflags $ldflagsString -o gitsqlite.exe
-                
-                # Verify the build was successful
-                if ($LASTEXITCODE -eq 0 -and (Test-Path "gitsqlite.exe")) {
-                    Write-Host "✓ Build successful - gitsqlite.exe created" -ForegroundColor Green
-                    $fileSize = [math]::Round((Get-Item "gitsqlite.exe").Length / 1MB, 2)
-                    Write-Host "File size: $fileSize MB" -ForegroundColor Cyan
-                    Write-Host ""
-                    Write-Host "Testing version output:" -ForegroundColor Yellow
-                    .\gitsqlite.exe -version
-                } else {
-                    Write-Host "✗ Build failed - gitsqlite.exe not found" -ForegroundColor Red
-                    exit 1
-                }
-            
-            # removed as this binary triggers windows defender
-            # - name: Upload Windows Binary to Release
-            #   uses: svenstaro/upload-release-action@2.9.0
-            #   with:
-            #     # default binary for windows.
-            #     repo_token: ${{ secrets.GITHUB_TOKEN }}
-            #     file: ./gitsqlite.exe
-            #     asset_name: gitsqlite.exe
-            #     tag: ${{ github.ref }}
-            #     overwrite: true
-       
-
-            # Add executive summary to release body
-            - name: Add executive summary to release body
-              uses: softprops/action-gh-release@v2
-              with:
-                append_body: true
-                body: |
-                  ## 📦 gitsqlite Release
-                  
-                  A Git clean/smudge filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges.
-                  
-                  ### Quick Start
-                  1. Download the appropriate binary for your platform
-                  2. Install SQLite 3: `winget install SQLite.SQLite` (Windows) or `sudo apt install sqlite3` (Linux)
-                  3. Configure Git filters:
-                     ```bash
-                     echo '*.db filter=gitsqlite diff=gitsqlite' >> .gitattributes
-                     git config filter.gitsqlite.clean "gitsqlite clean"
-                     git config filter.gitsqlite.smudge "gitsqlite smudge"
-                     ```
-                  
-                  ### Available Binaries
-                  - **Windows**: `gitsqlite.exe`, `gitsqlite-windows-amd64.exe`, `gitsqlite-windows-arm64.exe`
-                  - **Linux**: `gitsqlite-linux-amd64`, `gitsqlite-linux-arm64`
-                  - **macOS**: `gitsqlite-macos-amd64`, `gitsqlite-macos-arm64`
-                  
-                  📖 **Full documentation**: [README.md](https://github.com/danielsiegl/gitsqlite/blob/main/README.md)
-                  
-                  🔧 **Logging guide**: [log.md](https://github.com/danielsiegl/gitsqlite/blob/main/log.md)
-              env:
-                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     buildallplatforms:
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -124,6 +19,39 @@ jobs:
           id: get_version
           uses: dhkatz/get-version-action@v3.0.0
 
+        - name: Add executive summary to release body
+          uses: softprops/action-gh-release@v2
+          with:
+            append_body: true
+            body: |
+              ## 📦 gitsqlite Release
+              
+              A Git clean/smudge filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges.
+              
+              ### Quick Start
+              1. Download the appropriate binary for your platform and make sure it is reachable from Git Bash (Path)
+                  ```bash
+                  # Example for Windows
+                  curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/download/latest/gitsqlite-windows-amd64.exe
+                  ```
+              2. Install SQLite 3: `winget install SQLite.SQLite` (Windows) or `sudo apt install sqlite3` (Linux)
+              3. Configure Git filters:
+                  ```bash
+                  echo '*.db filter=gitsqlite diff=gitsqlite' >> .gitattributes
+                  git config filter.gitsqlite.clean "gitsqlite clean"
+                  git config filter.gitsqlite.smudge "gitsqlite smudge"
+                  ```
+              
+              ### Available Binaries
+              - **Windows**: `gitsqlite.exe`, `gitsqlite-windows-amd64.exe`, `gitsqlite-windows-arm64.exe`
+              - **Linux**: `gitsqlite-linux-amd64`, `gitsqlite-linux-arm64`
+              - **macOS**: `gitsqlite-macos-amd64`, `gitsqlite-macos-arm64`
+              
+              📖 **Full documentation**: [README.md](https://github.com/danielsiegl/gitsqlite/blob/main/README.md)
+              
+              🔧 **Logging guide**: [log.md](https://github.com/danielsiegl/gitsqlite/blob/main/log.md)
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
         - name: Set up Go
           uses: actions/setup-go@v4
           with:
@@ -162,7 +90,11 @@ jobs:
             function Build-Platform {
                 param (
                     [string]$GOOS,
-                    [string]$GOARCH = "amd64"
+                    [string]$GOARCH = "amd64",
+                    [string]$GitCommit,
+                    [string]$GitBranch,
+                    [string]$BuildTime,
+                    [string]$Version
                 )
                 
                 Write-Host "Building for $GOOS-$GOARCH..." -ForegroundColor Yellow
@@ -177,7 +109,7 @@ jobs:
                 }
                 
                 # Build ldflags with version information
-                $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
+                $ldflagsString = "-X 'github.com/danielsiegl/gitsqlite/internal/version.GitCommit=$GitCommit' -X 'github.com/danielsiegl/gitsqlite/internal/version.GitBranch=$GitBranch' -X 'github.com/danielsiegl/gitsqlite/internal/version.BuildTime=$BuildTime' -X 'github.com/danielsiegl/gitsqlite/internal/version.Version=$Version'"
                 
                 # Set environment variables and build
                 $env:GOOS = $GOOS
@@ -198,12 +130,12 @@ jobs:
             
             # Build for all platforms
             try {
-                Build-Platform -GOOS "linux" -GOARCH "amd64"
-                Build-Platform -GOOS "linux" -GOARCH "arm64"
-                Build-Platform -GOOS "windows" -GOARCH "amd64"
-                Build-Platform -GOOS "windows" -GOARCH "arm64"
-                Build-Platform -GOOS "darwin" -GOARCH "amd64"
-                Build-Platform -GOOS "darwin" -GOARCH "arm64"
+                Build-Platform -GOOS "linux" -GOARCH "amd64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
+                Build-Platform -GOOS "linux" -GOARCH "arm64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
+                Build-Platform -GOOS "windows" -GOARCH "amd64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
+                Build-Platform -GOOS "windows" -GOARCH "arm64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
+                Build-Platform -GOOS "darwin" -GOARCH "amd64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
+                Build-Platform -GOOS "darwin" -GOARCH "arm64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
                 
                 Write-Host "✓ All builds completed successfully!" -ForegroundColor Green
                 
