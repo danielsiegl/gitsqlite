@@ -18,7 +18,8 @@ Binary SQLite databases are opaque to Git – you can’t easily see changes or 
    ```bash
    # Windows
    curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
-   
+   ```
+   ```bash
    # Linux/macOS  
    curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
    chmod +x gitsqlite && sudo mv gitsqlite /usr/local/bin/
@@ -28,7 +29,8 @@ Binary SQLite databases are opaque to Git – you can’t easily see changes or 
    ```bash
    # Windows
    winget install SQLite.SQLite
-   
+   ```
+   ```bash
    # Linux (Ubuntu/Debian)
    sudo apt install sqlite3
    ```
