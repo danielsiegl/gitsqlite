@@ -486,5 +486,5 @@ Forked from [quarnster/gitsqlite](https://github.com/quarnster/gitsqlite) with i
    ```
 
 ## License
-
+[BSD-2-Clause](LICENSE) © Fredrik Ehnbom
 [BSD-2-Clause](LICENSE) © Daniel Siegl
