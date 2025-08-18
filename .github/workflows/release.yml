@@ -66,16 +66,17 @@ jobs:
                     Write-Host "✗ Build failed - gitsqlite.exe not found" -ForegroundColor Red
                     exit 1
                 }
-
-            - name: Upload Windows Binary to Release
-              uses: svenstaro/upload-release-action@2.9.0
-              with:
-                # default binary for windows.
-                repo_token: ${{ secrets.GITHUB_TOKEN }}
-                file: ./gitsqlite.exe
-                asset_name: gitsqlite.exe
-                tag: ${{ github.ref }}
-                overwrite: true
+            
+            # removed as this binary triggers windows defender
+            # - name: Upload Windows Binary to Release
+            #   uses: svenstaro/upload-release-action@2.9.0
+            #   with:
+            #     # default binary for windows.
+            #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+            #     file: ./gitsqlite.exe
+            #     asset_name: gitsqlite.exe
+            #     tag: ${{ github.ref }}
+            #     overwrite: true
        
 
             # Add executive summary to release body
