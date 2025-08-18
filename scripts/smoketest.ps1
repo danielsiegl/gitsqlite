@@ -1,7 +1,7 @@
-# GitSQLite Smoke Test - Simple Version
+# gitsqlite Smoke Test - Simple Version
 # Tests: SQL -> smudge -> DB -> clean -> SQL
 
-Write-Host "GitSQLite Smoke Test" -ForegroundColor Green
+Write-Host "gitsqlite Smoke Test" -ForegroundColor Green
 Write-Host "===================" -ForegroundColor Green
 
 # Find and change to git repository root
