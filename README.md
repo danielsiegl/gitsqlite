@@ -162,7 +162,206 @@ gitsqlite -sqlite-version
 
 ## Examples
 
-- [Example SQL output from a simple SQLite DB](examples.md)
+### Quick Start Example
+
+1. **Create a sample SQLite database:**
+```bash
+sqlite3 sample.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users (name, email) VALUES ('John Doe', 'john@example.com'), ('Jane Smith', 'jane@example.com');"
+```
+
+2. **Convert to SQL text:**
+```bash
+gitsqlite clean < sample.db > sample.sql
+```
+
+3. **View the SQL output:**
+```sql
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
+INSERT INTO users VALUES(1,'John Doe','john@example.com');
+INSERT INTO users VALUES(2,'Jane Smith','jane@example.com');
+COMMIT;
+```
+
+4. **Convert back to database:**
+```bash
+gitsqlite smudge < sample.sql > restored.db
+```
+
+5. **Verify the restoration:**
+```bash
+sqlite3 restored.db "SELECT * FROM users;"
+```
+
+### Advanced Usage Examples
+
+**With custom SQLite path:**
+```bash
+# Linux/macOS
+gitsqlite -sqlite /usr/local/bin/sqlite3 clean < database.db
+
+# Windows
+gitsqlite -sqlite "C:\sqlite\sqlite3.exe" clean < database.db
+```
+
+**With logging enabled:**
+```bash
+# Log to current directory
+gitsqlite -log clean < database.db > output.sql
+
+# Log to specific directory
+mkdir logs
+gitsqlite -log-dir ./logs clean < database.db > output.sql
+```
+
+**Pipeline usage:**
+```bash
+# Convert and preview first 10 lines
+cat sample.db | gitsqlite clean | head -10
+
+# Round-trip conversion in pipeline
+cat sample.sql | gitsqlite smudge | gitsqlite clean | tee converted.sql
+```
+
+**Git filter configuration:**
+```bash
+# Set up Git filters
+echo '*.sqlite filter=gitsqlite diff=gitsqlite' >> .gitattributes
+git config filter.gitsqlite.clean "gitsqlite clean"
+git config filter.gitsqlite.smudge "gitsqlite smudge"
+
+# Now Git will automatically convert SQLite files
+git add sample.sqlite
+git commit -m "Add database in SQL format"
+```
+
+### Round-trip Testing
+
+Test data integrity with a complete round-trip:
+```bash
+# Create test → SQL → Database → SQL (should be identical)
+gitsqlite smudge < sample.sql | gitsqlite clean > roundtrip.sql
+diff sample.sql roundtrip.sql
+```
+
+## Testing
+
+GitSQLite includes comprehensive test scripts to verify functionality across platforms.
+
+### Automated Test Scripts
+
+**Windows PowerShell:**
+```powershell
+# Basic test
+.\scripts\test_roundtrip.ps1
+
+# With verbose output and file preservation
+.\scripts\test_roundtrip.ps1 -Verbose -KeepFiles
+```
+
+**Linux/macOS/WSL:**
+```bash
+# Basic test
+./scripts/test_roundtrip.sh
+
+# Quick test (minimal output)
+./scripts/test_roundtrip.sh -q
+
+# Verbose test with file preservation
+./scripts/test_roundtrip.sh -v -k
+```
+
+### What the Tests Verify
+
+- ✅ **Clean operation**: Binary SQLite → SQL dump
+- ✅ **Smudge operation**: SQL dump → Binary SQLite  
+- ✅ **Data integrity**: Original data preserved through round-trip
+- ✅ **Table structure**: Schema correctly reconstructed
+- ✅ **File size consistency**: Binary files match in size
+- ✅ **Cross-platform compatibility**: Works on Windows, Linux, macOS
+
+### Test Output Example
+```
+🧪 GitSQLite Roundtrip Test
+✓ Using binary: ./gitsqlite
+✓ SQLite3 found: sqlite3
+📦 Creating test database...
+✓ Test database created with 3 records
+🧹 Clean operation (Database → SQL)...
+✓ Clean completed: 7 lines of SQL generated
+🔄 Smudge operation (SQL → Database)...
+✓ Smudge completed: Database reconstructed
+🔍 Verification...
+✓ Data integrity verified: 3 records match
+✓ File sizes match: 8192 bytes
+🎉 Roundtrip test completed successfully!
+```
+
+### Manual Testing Commands
+
+```bash
+# Check SQLite availability
+gitsqlite -sqlite-version
+
+# Check application version
+gitsqlite -version
+
+# Test with logging for debugging
+gitsqlite -log clean < test.db > test.sql
+gitsqlite -log smudge < test.sql > test-restored.db
+```
+
+## Logging
+
+GitSQLite provides comprehensive logging to help monitor performance and troubleshoot issues during clean and smudge operations.
+
+### Enabling Logging
+
+**Basic logging** (logs to current directory):
+```bash
+gitsqlite -log clean < database.db > output.sql
+```
+
+**Custom log directory**:
+```bash
+gitsqlite -log-dir ./logs clean < database.db > output.sql
+```
+
+### Log File Contents
+
+The log files contain detailed timing information in JSON format:
+- **Operation start/end times** with human-readable duration (HH:MM:SS.mmm)
+- **File operations** (copy, dump, restore, cleanup)
+- **Performance metrics** for large database processing
+- **Error messages** and debugging information
+
+### Example Log Entry
+
+```json
+{
+  "time": "2025-08-18T10:30:45.123Z",
+  "level": "INFO",
+  "msg": "Clean operation completed",
+  "operation": "clean",
+  "duration": "00:01:23.456",
+  "input_size": 1048576,
+  "output_lines": 1234
+}
+```
+
+### Log File Locations
+
+- **Default**: `gitsqlite-clean.log` or `gitsqlite-smudge.log` in current directory
+- **Custom**: Files are created in the directory specified by `-log-dir`
+- **Automatic cleanup**: Temporary files are logged and cleaned up after operations
+
+### Best Practices
+
+- Enable logging when troubleshooting performance issues
+- Use custom log directories to keep logs organized
+- Monitor log files for large database operations to track progress
+- Logs help identify bottlenecks in clean/smudge operations
 
 ## ⚠️ Important Notice: Database Merging
 
@@ -229,6 +428,62 @@ Forked from [quarnster/gitsqlite](https://github.com/quarnster/gitsqlite) with i
 - Added test scripts and example docs
 - Line ending differences between OSes should not cause diff noise.
 - Tries to detect Sqlite 
+
+## Troubleshooting
+
+### Common Issues
+
+**"sqlite3 not found" Error**
+- **Windows**: Use `winget install sqlite` or download from [sqlite.org](https://sqlite.org/download.html)
+- **Linux**: Use `sudo apt-get install sqlite3` or equivalent for your distribution
+- **macOS**: Use `brew install sqlite3` or use the system-provided version
+- **Manual**: Specify path with `-sqlite /path/to/sqlite3`
+
+**Empty Output from Clean Operation**
+- Verify SQLite file is valid: `file yourfile.db`
+- Check file permissions and accessibility
+- Enable logging with `-log` flag to see detailed error messages
+
+**Smudge Operation Creates Invalid Database**
+- Ensure input is valid SQL (test with `sqlite3 :memory: < input.sql`)
+- Check for unsupported SQLite extensions or pragmas
+- Verify SQL dump was created by GitSQLite or compatible tool
+
+**Permission Errors**
+- Check file permissions on database files
+- Ensure write access to output directory when using `-log-dir`
+- On Windows, avoid paths with special characters or spaces
+
+**Performance Issues**
+- Large databases (>100MB) may take significant time to process
+- Use SSD storage for better performance with large files
+- Monitor log files to identify bottlenecks in clean/smudge operations
+
+### Debugging Tips
+
+1. **Enable logging** to see detailed operation progress:
+   ```bash
+   gitsqlite -log clean < problem.db > output.sql
+   ```
+
+2. **Test SQLite accessibility** separately:
+   ```bash
+   sqlite3 -version
+   sqlite3 test.db ".tables"
+   ```
+
+3. **Verify round-trip integrity** on smaller test files first:
+   ```bash
+   # Create minimal test case
+   sqlite3 test.db "CREATE TABLE t(x); INSERT INTO t VALUES(1);"
+   gitsqlite clean < test.db | gitsqlite smudge > restored.db
+   ```
+
+4. **Check Git filter status**:
+   ```bash
+   git config --list | grep filter.gitsqlite
+   cat .gitattributes | grep gitsqlite
+   ```
 
 ## License
 
