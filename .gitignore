@@ -3,3 +3,4 @@ gitsqlite
 /bin/
 /testoutput/
 /test_roundtrip_20250811_133651/
+*.log

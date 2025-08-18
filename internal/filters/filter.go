@@ -7,18 +7,23 @@ import (
 )
 
 // FilterSqliteSequence removes CREATE/INSERT for sqlite_sequence from a .dump stream.
-// Uses a buffered Scanner with a larger max token size to tolerate long lines.
+// Uses a dynamic growing buffer to handle arbitrarily long lines.
 func FilterSqliteSequence(in io.Reader, out io.Writer) error {
-	sc := bufio.NewScanner(in)
-	const maxCap = 1024 * 1024 // 1 MiB
-	buf := make([]byte, 64*1024)
-	sc.Buffer(buf, maxCap)
-
 	bw := bufio.NewWriter(out)
 	defer bw.Flush()
 
-	for sc.Scan() {
-		line := sc.Text()
+	// Use a dynamically growing buffer approach
+	br := bufio.NewReader(in)
+	
+	for {
+		line, err := readLineWithGrowingBuffer(br)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		
 		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
 			continue
 		}
@@ -29,5 +34,28 @@ func FilterSqliteSequence(in io.Reader, out io.Writer) error {
 			return err
 		}
 	}
-	return sc.Err()
+	return nil
+}
+
+// readLineWithGrowingBuffer reads a complete line with a dynamically growing buffer
+func readLineWithGrowingBuffer(br *bufio.Reader) (string, error) {
+	var line []byte
+	
+	for {
+		part, isPrefix, err := br.ReadLine()
+		if err != nil {
+			if len(line) > 0 && err == io.EOF {
+				return string(line), io.EOF
+			}
+			return "", err
+		}
+		
+		line = append(line, part...)
+		
+		if !isPrefix {
+			break
+		}
+	}
+	
+	return string(line), nil
 }
