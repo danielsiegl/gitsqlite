@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/danielsiegl/gitsqlite/internal/logging"
 	"github.com/danielsiegl/gitsqlite/internal/sqlite"
 )
 
@@ -30,7 +31,7 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer)
 		return err
 	}
 	copyDuration := time.Since(copyStart)
-	slog.Info("Copied input to temp file", "duration", copyDuration)
+	slog.Info("Copied input to temp file", "duration", logging.FormatDuration(copyDuration))
 
 	if err := tmp.Close(); err != nil {
 		slog.Error("Failed to close temp file", "error", err)
@@ -46,7 +47,7 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer)
 			slog.Error("SQLite dump failed", "error", derr)
 			_ = pw.CloseWithError(derr)
 		} else {
-			slog.Info("SQLite dump completed", "duration", time.Since(dumpStart))
+			slog.Info("SQLite dump completed", "duration", logging.FormatDuration(time.Since(dumpStart)))
 		}
 	}()
 
@@ -56,12 +57,12 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer)
 	totalDuration := time.Since(startTime)
 
 	if err != nil {
-		slog.Error("Clean operation failed", "error", err, "totalDuration", totalDuration)
+		slog.Error("Clean operation failed", "error", err, "totalDuration", logging.FormatDuration(totalDuration))
 	} else {
-		slog.Info("Clean operation completed", 
-			"totalDuration", totalDuration,
-			"copyDuration", copyDuration,
-			"filterDuration", filterDuration)
+		slog.Info("Clean operation completed",
+			"totalDuration", logging.FormatDuration(totalDuration),
+			"copyDuration", logging.FormatDuration(copyDuration),
+			"filterDuration", logging.FormatDuration(filterDuration))
 	}
 
 	return err

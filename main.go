@@ -67,10 +67,10 @@ func main() {
 	}
 	logger, cleanup := logging.Setup(logTarget)
 	defer cleanup()
-	
+
 	// Set the logger as the default so all slog calls use it
 	slog.SetDefault(logger)
-	
+
 	logger.Info("gitsqlite started", "args", os.Args)
 
 	if *showHelp {

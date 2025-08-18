@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/danielsiegl/gitsqlite/internal/logging"
 	"github.com/danielsiegl/gitsqlite/internal/sqlite"
 )
 
@@ -27,11 +28,11 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 
 	restoreStart := time.Now()
 	if err := eng.Restore(ctx, tmpPath, in); err != nil {
-		slog.Error("SQLite restore failed", "error", err, "duration", time.Since(restoreStart))
+		slog.Error("SQLite restore failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
 		return err
 	}
 	restoreDuration := time.Since(restoreStart)
-	slog.Info("SQLite restore completed", "duration", restoreDuration)
+	slog.Info("SQLite restore completed", "duration", logging.FormatDuration(restoreDuration))
 
 	copyStart := time.Now()
 	f, err := os.Open(tmpPath)
@@ -46,12 +47,12 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 	totalDuration := time.Since(startTime)
 
 	if err != nil {
-		slog.Error("Smudge operation failed", "error", err, "totalDuration", totalDuration)
+		slog.Error("Smudge operation failed", "error", err, "totalDuration", logging.FormatDuration(totalDuration))
 	} else {
 		slog.Info("Smudge operation completed",
-			"totalDuration", totalDuration,
-			"restoreDuration", restoreDuration,
-			"copyDuration", copyDuration)
+			"totalDuration", logging.FormatDuration(totalDuration),
+			"restoreDuration", logging.FormatDuration(restoreDuration),
+			"copyDuration", logging.FormatDuration(copyDuration))
 	}
 
 	return err
