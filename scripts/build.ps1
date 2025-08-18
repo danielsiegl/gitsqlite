@@ -1,4 +1,4 @@
-# GitSQLite build script
+# gitsqlite build script
 # this script is used by main.yml on GitHub Actions
 # It also can be used locally to build the application for all platforms
 

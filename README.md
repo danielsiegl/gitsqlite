@@ -1,233 +1,353 @@
-# Why
+# gitsqlite
 
-I want to store [sqlite3](https://sqlite.org) databases as SQL code in git rather than binary files. Some suggest just using `sqlite %f .dump` and `sqlite %f` as filters, this however is abusing the [git attributes filter](https://git-scm.com/docs/gitattributes#_filter) mechanism (emphasis mine):
+[![License: BSD-2](https://img.shields.io/badge/license-BSD--2-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/danielsiegl/gitsqlite)](go.mod)
+[![Release](https://img.shields.io/github/v/release/danielsiegl/gitsqlite)](https://github.com/danielsiegl/gitsqlite/releases)
+[![Downloads](https://img.shields.io/github/downloads/danielsiegl/gitsqlite/total.svg)](https://github.com/danielsiegl/gitsqlite/releases)
 
->Note that "%f" is the name of the path that is being worked on. Depending on the version that is being filtered, the corresponding file on disk may not exist, or may have different contents. So, smudge and clean commands should *not try to access the file on disk*, but only act as filters on the content provided to them on *standard input*.
+A Git clean/smudge filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges.
 
-The afformentioned filters kind of works, but gives "file exists" errors due to reading and writing directly to the file that filters are not supposed to directly read nor write.
+## Why
 
-Also the dump needs to be processed to standardize linebreaks to UNIX style and remove all traces of the 'sqlite_sequence' table - as this would alter the text output and the filter will not work as expected!
+Binary SQLite databases are opaque to Git – you can’t easily see changes or resolve conflicts.  
+**gitsqlite** automatically converts between `.sqlite` and SQL text on checkout and commit, letting you version SQLite data just like source code.
 
-# How
+## Quick Start
 
-I couldn't get the `sqlite3` command line tool to directly read/write the binary database from/to a pipe, so a temporary file is created and removed once no longer needed.
+1. **Install gitsqlite** (see [Installation](#installation) for all options):
+   ```bash
+   # Windows
+   curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
+   
+   # Linux/macOS  
+   curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
+   chmod +x gitsqlite && sudo mv gitsqlite /usr/local/bin/
+   ```
 
-# Latest binaries
+2. **Ensure SQLite 3 is installed** (required dependency):
+   ```bash
+   # Windows
+   winget install SQLite.SQLite
+   
+   # Linux (Ubuntu/Debian)
+   sudo apt install sqlite3
+   ```
 
-You can download the latest binaries for Windows/Linux and Mac from here:
-https://github.com/danielsiegl/gitsqlite/releases/latest/
+3. **Configure Git filters**:
+   ```bash
+   echo '*.db filter=gitsqlite diff=gitsqlite' >> .gitattributes
+   git config filter.gitsqlite.clean "gitsqlite clean"
+   git config filter.gitsqlite.smudge "gitsqlite smudge"
+   ```
 
-# Installation
+4. **Start versioning SQLite files**:
+   ```bash
+   git add mydb.db
+   git commit -m "Add database in SQL format"
+   ```
 
-Install via
+Git will automatically convert SQLite files to SQL text for storage and back to binary when checked out.
+
+## ⚠️ Important Notice: Database Merging
+
+**Merging SQLite databases is complex and risky for many applications.** While gitsqlite enables text-based diffs and basic merging, **domain-specific databases often require specialized tools for safe merging**.
+
+### When NOT to rely on automatic merging:
+
+- **Sparx Enterprise Architect (.qeax)** databases - Use [LieberLieber LemonTree](https://www.lieberlieber.com/lemontree/) for proper model merging
+- **Application-specific databases** with complex schemas, constraints, or business logic
+- **Databases with foreign key relationships** where merge conflicts could break referential integrity
+- **Production databases** where data corruption could have serious consequences
+
+### Recommended workflow:
+
+1. **Use gitsqlite for visibility** - See what changed in your database commits
+2. **Use specialized tools for merging** - Domain experts tools understand your data structure
+3. **Manual conflict resolution** - Review and resolve conflicts using appropriate tools
+4. **Test thoroughly** - Validate database integrity after any merge operation
+
+**gitsqlite is excellent for tracking changes and simple scenarios, but consider it a foundation tool rather than a complete solution for complex database merging.**
+
+## Installation
+
+- **Windows (PowerShell)**:  
+  ```bash
+  # AMD64 (Intel/AMD 64-bit)
+  curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
+  # ARM64 (Windows on ARM)
+  # curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-arm64.exe
+  
+  # Move to a directory in your PATH, e.g.:
+  # Move-Item gitsqlite.exe C:\Windows\System32\
+  ```
+
+- **Linux**:  
+  ```bash
+  # AMD64 (Intel/AMD 64-bit) - using curl
+  curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
+  # ARM64 (ARM servers) - using curl
+  # curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-arm64
+  
+  # Alternative with wget
+  wget -O gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
+  
+  chmod +x gitsqlite
+  sudo mv gitsqlite /usr/local/bin/
+  ```
+
+- **macOS**:  
+  ```bash
+  # Intel Macs - using curl
+  curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-amd64
+  # Apple Silicon (M1/M2/M3) - using curl
+  # curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-arm64
+  
+  # Alternative with wget
+  wget -O gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-amd64
+  
+  chmod +x gitsqlite
+  sudo mv gitsqlite /usr/local/bin/
+  ```
+
+- **From Source (Go)**:  
+  ```bash
+  go install github.com/danielsiegl/gitsqlite@latest
+  ```
+
+**Requirements**:
+- `sqlite3` CLI available in `PATH` (or specify with `-sqlite` flag)
+- Go ≥ 1.21 (only needed to build from source)
+
+## Usage
+
+gitsqlite operates as a Git clean/smudge filter, automatically converting between binary SQLite databases and SQL text format.
+
+**Basic syntax:**
+```bash
+gitsqlite clean   # Convert SQLite binary → SQL text (for Git storage)
+gitsqlite smudge  # Convert SQL text → SQLite binary (for checkout)
 ```
- 
-git config --global filter.gitsqlite.clean "gitsqlite clean"
-git config --global filter.gitsqlite.smudge "gitsqlite smudge"
-echo "*.db filter=gitsqlite" >> .gitattributes
+
+**Manual conversion:**
+```bash
+gitsqlite clean < database.db > database.sql
+gitsqlite smudge < database.sql > database.db
 ```
 
-# Usage
+See [CLI Parameters](#cli-parameters) for all available options.
 
-## Command Line Options
+## CLI Parameters
 
-The gitsqlite tool supports the following command-line options:
+### Operations
+- **`clean`** - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout)
+- **`smudge`** - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)
 
-```
-Usage: gitsqlite [options] <operation>
-
-Operations:
-  clean   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout)
-  smudge  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)
-
-Options:
-  -help
-        Show help information
-  -log
-        Enable logging to file in current directory
-  -log-dir string
-        Log to specified directory instead of current directory
-  -sqlite string
-        Path to SQLite executable (default "sqlite3")
-  -sqlite-version
-        Check if SQLite is available and show its version
-  -version
-        Show version information
-```
+### Options
+- **`-sqlite <path>`** - Path to SQLite executable (default: "sqlite3")
+  ```bash
+  gitsqlite -sqlite /usr/local/bin/sqlite3 clean < database.db
+  ```
+- **`-log`** - Enable logging to file in current directory
+  ```bash
+  gitsqlite -log clean < database.db > database.sql
+  ```
+- **`-log-dir <directory>`** - Log to specified directory instead of current directory
+  ```bash
+  gitsqlite -log-dir ./logs clean < database.db > database.sql
+  ```
+- **`-version`** - Show version information
+  ```bash
+  gitsqlite -version
+  ```
+- **`-sqlite-version`** - Check if SQLite is available and show its version
+  ```bash
+  gitsqlite -sqlite-version
+  ```
+- **`-help`** - Show help information
+  ```bash
+  gitsqlite -help
+  ```
 
 ## Examples
 
+### Quick Start Example
+
+1. **Create a sample SQLite database:**
 ```bash
-# Basic operations (typically used by Git filters)
-gitsqlite clean < database.db > database.sql
-gitsqlite smudge < database.sql > database.db
-
-# Using custom SQLite path
-gitsqlite -sqlite /usr/local/bin/sqlite3 clean < database.db > database.sql
-
-# Enable logging for debugging (creates log files in current directory)
-gitsqlite -log clean < database.db > database.sql
-
-# Enable logging to specific directory
-gitsqlite -log-dir ./logs clean < database.db > database.sql
-
-# Check SQLite availability and version
-gitsqlite -sqlite-version
-
-# Show version information
-gitsqlite -version
-
-# Show help
-gitsqlite -help
+sqlite3 sample.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users (name, email) VALUES ('John Doe', 'john@example.com'), ('Jane Smith', 'jane@example.com');"
 ```
 
-For detailed examples and comprehensive usage instructions, see [example_clean.md](example_clean.md).
-
-## Logging and Debugging
-
-Gitsqlite includes comprehensive logging functionality to help diagnose issues, especially when used as Git filters.
-
-### Basic Logging
-
-Enable logging to create detailed log files in the current directory:
+2. **Convert to SQL text:**
 ```bash
-# Enable logging (creates timestamped log files in current directory)
-gitsqlite -log clean < database.db > database.sql
-gitsqlite -log smudge < database.sql > database.db
+gitsqlite clean < sample.db > sample.sql
 ```
 
-### Custom Log Directory
+3. **View the SQL output:**
+```sql
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
+INSERT INTO users VALUES(1,'John Doe','john@example.com');
+INSERT INTO users VALUES(2,'Jane Smith','jane@example.com');
+COMMIT;
+```
 
-Direct logs to a specific directory:
+4. **Convert back to database:**
 ```bash
-# Create logs directory and log there
-mkdir logs
-gitsqlite -log-dir ./logs clean < database.db > database.sql
+gitsqlite smudge < sample.sql > restored.db
 ```
 
-### Git Filter Integration with Logging
-
-For debugging Git filter issues, you can enable logging in your Git configuration:
+5. **Verify the restoration:**
 ```bash
-# Enable logging for Git filters
-git config --global filter.gitsqlite.clean "gitsqlite -log clean"
-git config --global filter.gitsqlite.smudge "gitsqlite -log smudge"
-
-# Or with custom log directory
-git config --global filter.gitsqlite.clean "gitsqlite -log-dir /tmp/gitsqlite-logs clean"
-git config --global filter.gitsqlite.smudge "gitsqlite -log-dir /tmp/gitsqlite-logs smudge"
+sqlite3 restored.db "SELECT * FROM users;"
 ```
 
-### Log File Format
+### Advanced Usage Examples
 
-Log files are created with unique timestamped names and contain JSON-structured information:
-- Filename format: `gitsqlite_YYYYMMDDTHHMMSS.sssZ_PID_UUID.log`
-- Content: JSON logs with timestamps, operation details, errors, and debugging information
-
-Example log entry:
-```json
-{"time":"2025-08-12T13:31:02.685Z","level":"INFO","msg":"gitsqlite started","invocation_id":"c66957e9-001a-474a-8a0a-ac398ae403ce","pid":12188,"args":["gitsqlite","-log","clean"]}
-{"time":"2025-08-12T13:31:02.696Z","level":"ERROR","msg":"no stdin data available","invocation_id":"c66957e9-001a-474a-8a0a-ac398ae403ce","pid":12188,"operation":"clean"}
-```
-
-**Important**: Flags must be placed **before** the operation:
-- ✅ Correct: `gitsqlite -log clean < input.db`
-- ❌ Wrong: `gitsqlite clean -log < input.db`
-
-## SQLite Installation
-
-If you don't have SQLite installed, you can install it via winget:
-```
-winget install -e --id SQLite.SQLite
-```
-Or use the provided installation scripts:
-- `scripts/install_sqlite.ps1` - Installs SQLite and adds to PATH
-
-## Custom SQLite Path
-
-If SQLite is not in your PATH, you can specify a custom path using the `-sqlite` flag:
+**With custom SQLite path:**
 ```bash
-git config --global filter.gitsqlite.clean "gitsqlite -sqlite /path/to/sqlite3 clean"
-git config --global filter.gitsqlite.smudge "gitsqlite -sqlite /path/to/sqlite3 smudge"
+# Linux/macOS
+gitsqlite -sqlite /usr/local/bin/sqlite3 clean < database.db
+
+# Windows
+gitsqlite -sqlite "C:\sqlite\sqlite3.exe" clean < database.db
 ```
 
-### Windows Example
-```cmd
-git config --global filter.gitsqlite.clean "gitsqlite -sqlite C:\sqlite\sqlite3.exe clean"
-git config --global filter.gitsqlite.smudge "gitsqlite -sqlite C:\sqlite\sqlite3.exe smudge"
-```
+### Round-trip Testing
 
-### Linux/macOS Example  
+Test data integrity with a complete round-trip:
 ```bash
-git config --global filter.gitsqlite.clean "gitsqlite -sqlite /usr/local/bin/sqlite3 clean"
-git config --global filter.gitsqlite.smudge "gitsqlite -sqlite /usr/local/bin/sqlite3 smudge"
+# Create test → SQL → Database → SQL (should be identical)
+gitsqlite smudge < sample.sql | gitsqlite clean > roundtrip.sql
+diff sample.sql roundtrip.sql
 ```
+
+### Manual Testing Commands
+
+```bash
+# Test with logging for debugging
+gitsqlite -log clean < test.db > test.sql
+gitsqlite -log smudge < test.sql > test-restored.db
+
+# Verify round-trip integrity
+gitsqlite clean < test.db | gitsqlite smudge > restored.db
+sqlite3 restored.db "SELECT COUNT(*) FROM sqlite_master;"
+```
+
+## Logging
+
+gitsqlite provides comprehensive logging to help monitor performance and troubleshoot issues during clean and smudge operations.
+
+### Quick Start
+
+**Enable basic logging:**
+```bash
+gitsqlite -log clean < database.db > output.sql
+```
+📖 **For comprehensive logging documentation, see [log.md](log.md)**
+
+## Known Issues / Limitations
+
+- `sqlite_sequence` table content can change outside of your edits.
+- Large databases may be slow to convert.
+- Temporary files are written to the system temp directory.
+
+## Uninstall
+
+To remove the filter globally:
+
+```bash
+git config --global --unset-all filter.gitsqlite.clean
+git config --global --unset-all filter.gitsqlite.smudge
+```
+
+Remove the `.gitattributes` entry from your repos.
+
+## Contributing
+
+Pull requests and issues are welcome.
+
+- Run tests before submitting:
+  ```bash
+  go test ./...
+  # or
+  ./scripts/test_roundtrip.ps1
+  ```
+- Keep PRs focused on one change.
+- Follow Go code conventions.
+- See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) (optional file).
+
+## Versioning & Changelog
+
+We follow [Semantic Versioning](https://semver.org/).  
+Changes are documented in [Releases](https://github.com/danielsiegl/gitsqlite/releases).
+
+## Credits
+
+Forked from [quarnster/gitsqlite](https://github.com/quarnster/gitsqlite) with improvements:
+- Updated build and installation instructions
+- Made to handle more scenarios
+- Fixed cross-platform compatibility issues
+- Added test scripts and example docs
+- Line ending differences between OSes should not cause diff noise.
+- Tries to detect Sqlite 
 
 ## Troubleshooting
 
-### Check SQLite Installation
-Before troubleshooting gitsqlite, verify that SQLite is properly installed:
-```bash
-# Check if SQLite is available and show version
-gitsqlite -sqlite-version
-
-# Check with custom SQLite path
-gitsqlite -sqlite /usr/local/bin/sqlite3 -sqlite-version
-```
-
-### Check Version and Location
-To verify which version of gitsqlite is being used by Git filters:
-```bash
-gitsqlite -version
-```
-
-### Enable Logging for Debugging
-When experiencing issues, enable logging to get detailed information:
-```bash
-# Enable logging for debugging
-gitsqlite -log clean < your_database.db > output.sql
-
-# Check the generated log file for errors
-cat gitsqlite_*.log
-```
-
-For Git filter debugging, temporarily enable logging in your Git configuration:
-```bash
-# Temporarily enable logging for Git filters
-git config filter.gitsqlite.clean "gitsqlite -log clean"
-git config filter.gitsqlite.smudge "gitsqlite -log smudge"
-
-# Perform Git operations that trigger filters
-git add your_database.db
-git commit -m "test"
-
-# Check log files for issues
-ls gitsqlite_*.log
-```
-
-### Test the Tool
-You can test the round-trip conversion manually:
-```bash
-# Test: SQL → Binary → SQL
-cat your_database.sql | gitsqlite smudge | gitsqlite clean > output.sql
-diff your_database.sql output.sql
-
-# Test with logging enabled
-cat your_database.sql | gitsqlite -log smudge | gitsqlite -log clean > output.sql
-```
-
-For comprehensive testing, use the automated test suite:
-```powershell
-# Run the complete test suite including external file testing
-./scripts/test_roundtrip.ps1
-```
-
-See [example_clean.md](examples.md) for detailed testing instructions and examples.
-
 ### Common Issues
-- **SQLite not found**: Use `gitsqlite -sqlite-version` to check SQLite availability, or use the `-sqlite` flag to specify the correct path
-- **Permission errors**: Ensure gitsqlite has write access to create temporary files and log files
-- **Git filter not working**: Check that your `.gitattributes` file includes `*.db filter=gitsqlite`
-- **No input provided via stdin**: This error occurs when no data is piped to gitsqlite. Git filters automatically provide data via stdin
-- **Logging not working**: Ensure flags are placed before the operation (e.g., `gitsqlite -log clean` not `gitsqlite clean -log`)
-- **Log files not created**: Check file permissions in the target directory and ensure the directory exists when using `-log-dir`
+
+**"sqlite3 not found" Error**
+- **Windows**: Use `winget install sqlite` or download from [sqlite.org](https://sqlite.org/download.html)
+- **Linux**: Use `sudo apt-get install sqlite3` or equivalent for your distribution
+- **macOS**: Use `brew install sqlite3` or use the system-provided version
+- **Manual**: Specify path with `-sqlite /path/to/sqlite3`
+
+**Empty Output from Clean Operation**
+- Verify SQLite file is valid: `file yourfile.db`
+- Check file permissions and accessibility
+- Enable logging with `-log` flag to see detailed error messages
+
+**Smudge Operation Creates Invalid Database**
+- Ensure input is valid SQL (test with `sqlite3 :memory: < input.sql`)
+- Check for unsupported SQLite extensions or pragmas
+- Verify SQL dump was created by gitsqlite or compatible tool
+
+**Permission Errors**
+- Check file permissions on database files
+- Ensure write access to output directory when using `-log-dir`
+- On Windows, avoid paths with special characters or spaces
+
+**Performance Issues**
+- Large databases (>100MB) may take significant time to process
+- Use SSD storage for better performance with large files
+- Monitor log files to identify bottlenecks in clean/smudge operations
+
+### Debugging Tips
+
+1. **Enable logging** to see detailed operation progress:
+   ```bash
+   gitsqlite -log clean < problem.db > output.sql
+   ```
+
+2. **Test SQLite accessibility** separately:
+   ```bash
+   sqlite3 -version
+   sqlite3 test.db ".tables"
+   ```
+
+3. **Verify round-trip integrity** on smaller test files first:
+   ```bash
+   # Create minimal test case
+   sqlite3 test.db "CREATE TABLE t(x); INSERT INTO t VALUES(1);"
+   gitsqlite clean < test.db | gitsqlite smudge > restored.db
+   ```
+
+4. **Check Git filter status**:
+   ```bash
+   git config --list | grep filter.gitsqlite
+   cat .gitattributes | grep gitsqlite
+   ```
+
+## License
+[BSD-2-Clause](LICENSE) © Fredrik Ehnbom
+[BSD-2-Clause](LICENSE) © Daniel Siegl

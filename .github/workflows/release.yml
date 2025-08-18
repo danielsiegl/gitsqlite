@@ -76,6 +76,16 @@ jobs:
                 asset_name: gitsqlite.exe
                 tag: ${{ github.ref }}
                 overwrite: true
+       
+
+            # Append README.md to the existing body
+            - name: Append README to release body
+              uses: softprops/action-gh-release@v2
+              with:
+                append_body: true
+                body_path: README.md
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     buildallplatforms:
         runs-on: ubuntu-latest
