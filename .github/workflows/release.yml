@@ -43,13 +43,11 @@ jobs:
                   ```
               
               ### Available Binaries
-              - **Windows**: `gitsqlite.exe`, `gitsqlite-windows-amd64.exe`, `gitsqlite-windows-arm64.exe`
+              - **Windows**: `gitsqlite-windows-amd64.exe`, `gitsqlite-windows-arm64.exe`
               - **Linux**: `gitsqlite-linux-amd64`, `gitsqlite-linux-arm64`
               - **macOS**: `gitsqlite-macos-amd64`, `gitsqlite-macos-arm64`
               
-              📖 **Full documentation**: [README.md](https://github.com/danielsiegl/gitsqlite/blob/main/README.md)
-              
-              🔧 **Logging guide**: [log.md](https://github.com/danielsiegl/gitsqlite/blob/main/log.md)
+              📖 **Full documentation**: [README.md](https://github.com/danielsiegl/gitsqlite/blob/main/README.md)       
           env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
         - name: Set up Go
