@@ -45,3 +45,12 @@ func Setup(logDir string) (*slog.Logger, func()) {
 		With("invocation_id", uuid.NewString(), "pid", os.Getpid())
 	return logger, cleanup
 }
+
+// FormatDuration formats a duration as HH:MM:SS.mmm for human-readable logging
+func FormatDuration(d time.Duration) string {
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+	milliseconds := int(d.Nanoseconds()/1000000) % 1000
+	return fmt.Sprintf("%02d:%02d:%02d.%03d", hours, minutes, seconds, milliseconds)
+}
