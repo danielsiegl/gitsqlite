@@ -14,47 +14,30 @@ Binary SQLite databases are opaque to Git – you can’t easily see changes or 
 
 ## Quick Start
 
-Windows
-```bash
-# Install globally (download latest release)
-# Windows (PowerShell)
-curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
-# Windows ARM64
-# curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-arm64.exe
-```
+1. **Install GitSQLite** (see [Installation](#installation) for all options):
+   ```bash
+   # Windows
+   curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
+   
+   # Linux/macOS  
+   curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
+   chmod +x gitsqlite && sudo mv gitsqlite /usr/local/bin/
+   ```
 
-```bash
-# Linux/macOS (bash)
-curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
-chmod +x gitsqlite
-sudo mv gitsqlite /usr/local/bin/
+2. **Configure Git filters**:
+   ```bash
+   echo '*.sqlite filter=gitsqlite diff=gitsqlite' >> .gitattributes
+   git config filter.gitsqlite.clean "gitsqlite clean"
+   git config filter.gitsqlite.smudge "gitsqlite smudge"
+   ```
 
-# Alternative with wget
-wget -O gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
-chmod +x gitsqlite
-sudo mv gitsqlite /usr/local/bin/
-```
+3. **Start versioning SQLite files**:
+   ```bash
+   git add mydb.sqlite
+   git commit -m "Add database in SQL format"
+   ```
 
-```bash
-# or build from source
-go install github.com/danielsiegl/gitsqlite@latest
-```
-
-```bash
-# Tell Git to use gitsqlite for *.sqlite files
-echo '*.sqlite filter=gitsqlite diff=gitsqlite' >> .gitattributes
-git config --global filter.gitsqlite.clean "gitsqlite clean"
-git config --global filter.gitsqlite.smudge "gitsqlite smudge"
-```
-
-Now commit a SQLite file:
-
-```bash
-git add mydb.sqlite
-git commit -m "Versioned database in SQL"
-```
-
-Git will store the text representation, so you can diff and merge normally.
+Git will automatically convert SQLite files to SQL text for storage and back to binary when checked out.
 
 ## Installation
 
@@ -68,46 +51,61 @@ Git will store the text representation, so you can diff and merge normally.
   # Move to a directory in your PATH, e.g.:
   # Move-Item gitsqlite.exe C:\Windows\System32\
   ```
+
 - **Linux**:  
   ```bash
-  # AMD64 (Intel/AMD 64-bit)
+  # AMD64 (Intel/AMD 64-bit) - using curl
   curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
-  # ARM64 (Apple Silicon, ARM servers)
+  # ARM64 (ARM servers) - using curl
   # curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-arm64
   
-  chmod +x gitsqlite
-  sudo mv gitsqlite /usr/local/bin/
-  ```
-- **macOS**:  
-  ```bash
-  # Intel Macs
-  curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-amd64
-  # Apple Silicon (M1/M2/M3)
-  # curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-arm64
+  # Alternative with wget
+  wget -O gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
   
   chmod +x gitsqlite
   sudo mv gitsqlite /usr/local/bin/
   ```
+
+- **macOS**:  
+  ```bash
+  # Intel Macs - using curl
+  curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-amd64
+  # Apple Silicon (M1/M2/M3) - using curl
+  # curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-arm64
+  
+  # Alternative with wget
+  wget -O gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-amd64
+  
+  chmod +x gitsqlite
+  sudo mv gitsqlite /usr/local/bin/
+  ```
+
 - **From Source (Go)**:  
   ```bash
   go install github.com/danielsiegl/gitsqlite@latest
   ```
 
-Requires:
-- Go ≥ 1.21 (to build from source)
+**Requirements**:
 - `sqlite3` CLI available in `PATH` (or specify with `-sqlite` flag)
+- Go ≥ 1.21 (only needed to build from source)
 
 ## Usage
 
-```bash
-Usage:
-  gitsqlite clean [-sqlite <path>] [-tmpdir <dir>]
-  gitsqlite smudge [-sqlite <path>] [-tmpdir <dir>]
+GitSQLite operates as a Git clean/smudge filter, automatically converting between binary SQLite databases and SQL text format.
 
-Flags:
-  -sqlite string   path to sqlite3 binary (default: sqlite3 in PATH)
-  -tmpdir string   directory for temporary files (default: system temp dir)
+**Basic syntax:**
+```bash
+gitsqlite clean   # Convert SQLite binary → SQL text (for Git storage)
+gitsqlite smudge  # Convert SQL text → SQLite binary (for checkout)
 ```
+
+**Manual conversion:**
+```bash
+gitsqlite clean < database.db > database.sql
+gitsqlite smudge < database.sql > database.db
+```
+
+See [CLI Parameters](#cli-parameters) for all available options.
 
 ## CLI Parameters
 
@@ -140,25 +138,6 @@ Flags:
   ```bash
   gitsqlite -help
   ```
-
-### Usage Examples
-
-```bash
-# Basic usage with Git filters
-echo '*.sqlite filter=gitsqlite diff=gitsqlite' >> .gitattributes
-git config filter.gitsqlite.clean "gitsqlite clean"
-git config filter.gitsqlite.smudge "gitsqlite smudge"
-
-# Manual conversion with logging
-gitsqlite -log clean < database.db > database.sql
-gitsqlite -log smudge < database.sql > database.db
-
-# Using custom SQLite path
-gitsqlite -sqlite /opt/sqlite/bin/sqlite3 clean < database.db
-
-# Check SQLite availability
-gitsqlite -sqlite-version
-```
 
 ## Examples
 
@@ -222,18 +201,6 @@ cat sample.db | gitsqlite clean | head -10
 
 # Round-trip conversion in pipeline
 cat sample.sql | gitsqlite smudge | gitsqlite clean | tee converted.sql
-```
-
-**Git filter configuration:**
-```bash
-# Set up Git filters
-echo '*.sqlite filter=gitsqlite diff=gitsqlite' >> .gitattributes
-git config filter.gitsqlite.clean "gitsqlite clean"
-git config filter.gitsqlite.smudge "gitsqlite smudge"
-
-# Now Git will automatically convert SQLite files
-git add sample.sqlite
-git commit -m "Add database in SQL format"
 ```
 
 ### Round-trip Testing
@@ -301,15 +268,13 @@ GitSQLite includes comprehensive test scripts to verify functionality across pla
 ### Manual Testing Commands
 
 ```bash
-# Check SQLite availability
-gitsqlite -sqlite-version
-
-# Check application version
-gitsqlite -version
-
 # Test with logging for debugging
 gitsqlite -log clean < test.db > test.sql
 gitsqlite -log smudge < test.sql > test-restored.db
+
+# Verify round-trip integrity
+gitsqlite clean < test.db | gitsqlite smudge > restored.db
+sqlite3 restored.db "SELECT COUNT(*) FROM sqlite_master;"
 ```
 
 ## Logging
