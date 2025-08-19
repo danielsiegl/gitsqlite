@@ -193,7 +193,7 @@ func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, 
 
 	// Build the SQLite command script
 	tableList := strings.Join(tables, " ")
-	
+
 	// Build script with cross-platform compatibility
 	// Note: .crlf command only exists on Windows SQLite builds
 	var script string
@@ -226,11 +226,11 @@ func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, 
 		line := scanner.Text()
 		// Skip the headers that SQLite adds to each .dump command
 		if strings.HasPrefix(line, "PRAGMA foreign_keys=OFF;") ||
-		   strings.HasPrefix(line, "BEGIN TRANSACTION;") ||
-		   line == "COMMIT;" {
+			strings.HasPrefix(line, "BEGIN TRANSACTION;") ||
+			line == "COMMIT;" {
 			continue
 		}
-		
+
 		if _, err := out.Write([]byte(line + "\n")); err != nil {
 			return fmt.Errorf("failed to write output: %w", err)
 		}
@@ -249,7 +249,7 @@ func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, 
 	}
 
 	return nil
-}// ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
+} // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
 	_, err := e.GetPathWithPackageManager()
 	return err
