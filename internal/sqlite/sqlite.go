@@ -22,12 +22,30 @@ import (
 
 // Engine shells out to a sqlite3 binary.
 type Engine struct {
-	Bin string
+	Bin        string
+	cachedPath string // Cache the binary path to avoid repeated expensive lookups
+}
+
+// getCachedPath returns the cached binary path or performs lookup if not cached
+func (e *Engine) getCachedPath() (string, error) {
+	if e.cachedPath != "" {
+		return e.cachedPath, nil
+	}
+	
+	// Perform the expensive lookup only once
+	path, err := e.GetPathWithPackageManager()
+	if err != nil {
+		return "", err
+	}
+	
+	// Cache the result
+	e.cachedPath = path
+	return path, nil
 }
 
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
-	// Use enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithPackageManager()
+	// Use cached path lookup to avoid expensive repeated lookups
+	binaryPath, err := e.getCachedPath()
 	if err != nil {
 		return fmt.Errorf("SQLite binary not found: %w", err)
 	}
@@ -38,11 +56,15 @@ func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) erro
 }
 
 func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
-	// Use enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithPackageManager()
+	fmt.Printf("DEBUG: Dump method called, starting cached path lookup\n")
+	
+	// Use cached path lookup to avoid expensive repeated lookups
+	binaryPath, err := e.getCachedPath()
 	if err != nil {
 		return fmt.Errorf("SQLite binary not found: %w", err)
 	}
+	
+	fmt.Printf("DEBUG: Binary path found: %s\n", binaryPath)
 
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
 	cmd.Stdout = out
