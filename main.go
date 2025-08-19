@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/danielsiegl/gitsqlite/internal/filters"
 	"github.com/danielsiegl/gitsqlite/internal/logging"
@@ -163,8 +164,23 @@ func main() {
 		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
 			logger.Error("clean failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "Error running SQLite command for clean operation: %v\n", err)
-			os.Exit(3)
+
+			// Determine exit code based on error type
+			errorMsg := err.Error()
+			switch {
+			case strings.Contains(errorMsg, "broken pipe") || strings.Contains(errorMsg, "pipe is being closed"):
+				logger.Info("Exiting due to broken pipe", "exitCode", 8)
+				os.Exit(8) // Broken pipe error
+			case strings.Contains(errorMsg, "timed out"):
+				fmt.Fprintf(os.Stderr, "Error: SQLite operation timed out - check database size and system resources: %v\n", err)
+				os.Exit(4) // Timeout error
+			case strings.Contains(errorMsg, "malformed") || strings.Contains(errorMsg, "corrupted") || strings.Contains(errorMsg, "not a database"):
+				fmt.Fprintf(os.Stderr, "Error: Database corruption detected - verify database integrity: %v\n", err)
+				os.Exit(5) // Database corruption error
+			default:
+				fmt.Fprintf(os.Stderr, "Error running SQLite command for clean operation: %v\n", err)
+				os.Exit(3) // Generic error
+			}
 		}
 		logger.Info("clean completed")
 	}

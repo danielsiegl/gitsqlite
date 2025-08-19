@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,12 +23,30 @@ import (
 
 // Engine shells out to a sqlite3 binary.
 type Engine struct {
-	Bin string
+	Bin        string
+	cachedPath string // Cache the binary path to avoid repeated expensive lookups
+}
+
+// getCachedPath returns the cached binary path or performs lookup if not cached
+func (e *Engine) getCachedPath() (string, error) {
+	if e.cachedPath != "" {
+		return e.cachedPath, nil
+	}
+
+	// Perform the expensive lookup only once
+	path, err := e.GetPathWithPackageManager()
+	if err != nil {
+		return "", err
+	}
+
+	// Cache the result
+	e.cachedPath = path
+	return path, nil
 }
 
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
-	// Use enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithPackageManager()
+	// Use cached path lookup to avoid expensive repeated lookups
+	binaryPath, err := e.getCachedPath()
 	if err != nil {
 		return fmt.Errorf("SQLite binary not found: %w", err)
 	}
@@ -38,15 +57,40 @@ func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) erro
 }
 
 func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
-	// Use enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithPackageManager()
+	// Add debug logging using slog
+	slog.Debug("Dump method called, starting cached path lookup")
+
+	// Use cached path lookup to avoid expensive repeated lookups
+	binaryPath, err := e.getCachedPath()
 	if err != nil {
 		return fmt.Errorf("SQLite binary not found: %w", err)
 	}
 
+	slog.Debug("Binary path found", "path", binaryPath)
+
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
 	cmd.Stdout = out
-	return cmd.Run()
+
+	// Capture stderr to see SQLite error messages
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+
+	// Add debug logging using slog
+	slog.Debug("Starting SQLite command", "command", binaryPath, "database", dbPath)
+
+	err = cmd.Run()
+
+	slog.Debug("SQLite command completed", "error", err)
+	if err != nil {
+		stderrOutput := stderr.String()
+		slog.Debug("SQLite stderr output", "stderr", stderrOutput)
+		if stderrOutput != "" {
+			return fmt.Errorf("SQLite dump failed (exit code error): %s: %w", stderrOutput, err)
+		}
+		return fmt.Errorf("SQLite dump failed: %w", err)
+	}
+
+	return nil
 }
 
 // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
