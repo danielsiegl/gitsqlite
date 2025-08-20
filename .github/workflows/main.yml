@@ -162,3 +162,51 @@ jobs:
     - name: Evaluate test results
       shell: pwsh
       run: ./scripts/evaluatetest.ps1 -Cleanup
+
+  test-windows-amd64:
+    needs: build
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    
+    - name: Check SQLite3 availability
+      shell: pwsh
+      run: |
+        try {
+          $version = sqlite3 --version
+          Write-Host "SQLite3 is already available: $version"
+        } catch {
+          Write-Host "SQLite3 not found in PATH, but should be available on Windows runners"
+          Write-Host "Checking if sqlite3.exe is available..."
+          if (Get-Command sqlite3.exe -ErrorAction SilentlyContinue) {
+            Write-Host "Found sqlite3.exe: $(sqlite3.exe --version)"
+          } else {
+            Write-Error "SQLite3 not available - this may cause test failures"
+          }
+        }
+    
+    - name: Create test database
+      shell: pwsh
+      run: ./scripts/createtestdatabase.ps1
+    
+    - name: Run integrated smoketest on Windows
+      shell: pwsh
+      run: |
+        Write-Host "Step 1: Database -> SQL (clean)"
+        Get-Content smoketest.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output1.sql
+        
+        Write-Host "Step 2: SQL -> Database (smudge)"
+        Get-Content smoketest_output1.sql | ./bin/gitsqlite-windows-amd64.exe smudge > smoketest_output2.db
+        
+        Write-Host "Step 3: Database -> SQL (clean again)"
+        Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output2.sql
+    
+    - name: Evaluate test results
+      shell: pwsh
+      run: ./scripts/evaluatetest.ps1 -Cleanup
