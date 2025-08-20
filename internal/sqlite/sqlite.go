@@ -10,6 +10,7 @@
 package sqlite
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -93,7 +94,162 @@ func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
 	return nil
 }
 
-// ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
+// DumpSelectiveTables dumps only user tables (excluding sqlite_sequence) using SQLite native commands
+func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.Writer) error {
+	slog.Debug("DumpSelectiveTables method called")
+
+	// Use cached path lookup
+	binaryPath, err := e.getCachedPath()
+	if err != nil {
+		return fmt.Errorf("SQLite binary not found: %w", err)
+	}
+
+	// Get list of user tables (excluding sqlite_* system tables)
+	userTables, err := e.getUserTables(ctx, dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to get user tables: %w", err)
+	}
+
+	if len(userTables) == 0 {
+		slog.Debug("No user tables found, performing empty dump")
+		// Write minimal SQLite dump structure
+		_, err := out.Write([]byte("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\nCOMMIT;\n"))
+		return err
+	}
+
+	slog.Debug("Found user tables", "count", len(userTables))
+
+	// Write SQLite dump header
+	if _, err := out.Write([]byte("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n")); err != nil {
+		return fmt.Errorf("failed to write dump header: %w", err)
+	}
+
+	// Process tables in batches to avoid command line length limits
+	batchSize := 50 // Increased from 20 since our implementation already handles this
+	for i := 0; i < len(userTables); i += batchSize {
+		end := i + batchSize
+		if end > len(userTables) {
+			end = len(userTables)
+		}
+		batch := userTables[i:end]
+
+		slog.Debug("Processing table batch", "batch", (i/batchSize)+1, "tables", len(batch))
+
+		if err := e.dumpTableBatch(ctx, binaryPath, dbPath, batch, out); err != nil {
+			return fmt.Errorf("failed to dump table batch: %w", err)
+		}
+	}
+
+	// Write SQLite dump footer
+	if _, err := out.Write([]byte("COMMIT;\n")); err != nil {
+		return fmt.Errorf("failed to write dump footer: %w", err)
+	}
+
+	slog.Debug("DumpSelectiveTables completed successfully")
+	return nil
+}
+
+// getUserTables gets the list of user tables (excluding sqlite_* system tables)
+func (e *Engine) getUserTables(ctx context.Context, dbPath string) ([]string, error) {
+	binaryPath, err := e.getCachedPath()
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, binaryPath, dbPath, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		stderrOutput := stderr.String()
+		if stderrOutput != "" {
+			return nil, fmt.Errorf("failed to query tables: %s: %w", stderrOutput, err)
+		}
+		return nil, fmt.Errorf("failed to query tables: %w", err)
+	}
+
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
+		return []string{}, nil
+	}
+
+	tables := strings.Split(output, "\n")
+	// Clean up any extra whitespace
+	for i, table := range tables {
+		tables[i] = strings.TrimSpace(table)
+	}
+
+	return tables, nil
+}
+
+// dumpTableBatch dumps a batch of tables using SQLite .dump command
+func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, tables []string, out io.Writer) error {
+	if len(tables) == 0 {
+		return nil
+	}
+
+	// Build the SQLite command script
+	tableList := strings.Join(tables, " ")
+
+	// Build script with cross-platform compatibility
+	// Note: .crlf command only exists on Windows SQLite builds
+	var script string
+	if runtime.GOOS == "windows" {
+		script = fmt.Sprintf(".crlf OFF\n.dump %s\n", tableList)
+	} else {
+		// On Unix systems, SQLite uses LF by default, so no .crlf command needed
+		script = fmt.Sprintf(".dump %s\n", tableList)
+	}
+
+	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
+	cmd.Stdin = strings.NewReader(script)
+
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+
+	// Create a pipe to capture and filter the output
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start SQLite command: %w", err)
+	}
+
+	// Filter out the PRAGMA and transaction statements that SQLite adds for each batch
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Skip the headers that SQLite adds to each .dump command
+		if strings.HasPrefix(line, "PRAGMA foreign_keys=OFF;") ||
+			strings.HasPrefix(line, "BEGIN TRANSACTION;") ||
+			line == "COMMIT;" {
+			continue
+		}
+
+		if _, err := out.Write([]byte(line + "\n")); err != nil {
+			return fmt.Errorf("failed to write output: %w", err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading SQLite output: %w", err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		stderrOutput := stderr.String()
+		if stderrOutput != "" {
+			return fmt.Errorf("SQLite batch dump failed: %s: %w", stderrOutput, err)
+		}
+		return fmt.Errorf("SQLite batch dump failed: %w", err)
+	}
+
+	return nil
+} // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
 	_, err := e.GetPathWithPackageManager()
 	return err
