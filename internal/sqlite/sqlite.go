@@ -186,7 +186,7 @@ func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath,
 	} else {
 		schemaScript = fmt.Sprintf(".schema %s\n", table)
 	}
-	
+
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = strings.NewReader(schemaScript)
 	cmd.Stdout = out
@@ -209,7 +209,7 @@ func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath,
 	} else {
 		dataScript = fmt.Sprintf(".mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
 	}
-	
+
 	cmd = exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = strings.NewReader(dataScript)
 	cmd.Stdout = out
