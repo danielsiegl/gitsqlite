@@ -185,7 +185,7 @@ func (e *Engine) getUserTables(ctx context.Context, dbPath string) ([]string, er
 	return tables, nil
 }
 
-// dumpTableBatch dumps a batch of tables using SQLite .dump command
+// dumpTableBatch dumps a batch of tables using SQLite .dump command with streaming output
 func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, tables []string, out io.Writer) error {
 	if len(tables) == 0 {
 		return nil
@@ -221,7 +221,14 @@ func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, 
 	}
 
 	// Filter out the PRAGMA and transaction statements that SQLite adds for each batch
+	// Use bufio.Scanner for line-by-line processing but with larger buffer to handle large lines
 	scanner := bufio.NewScanner(stdout)
+	
+	// Increase the scanner buffer size to handle very large lines (like big INSERT statements)
+	const maxScanTokenSize = 64 * 1024 * 1024 // 64MB buffer for very large SQL statements
+	buf := make([]byte, 0, maxScanTokenSize)
+	scanner.Buffer(buf, maxScanTokenSize)
+	
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Skip the headers that SQLite adds to each .dump command
@@ -231,8 +238,15 @@ func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, 
 			continue
 		}
 
-		if _, err := out.Write([]byte(line + "\n")); err != nil {
-			return fmt.Errorf("failed to write output: %w", err)
+		// Write the line with proper error handling for partial writes
+		lineBytes := []byte(line + "\n")
+		written := 0
+		for written < len(lineBytes) {
+			n, err := out.Write(lineBytes[written:])
+			written += n
+			if err != nil {
+				return fmt.Errorf("failed to write output: %w", err)
+			}
 		}
 	}
 
