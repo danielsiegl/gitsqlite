@@ -204,14 +204,16 @@ jobs:
     
         Write-Host "Step 3: Database -> SQL (clean again)"
         Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output2.sql
-    
-    - name: Evaluate test results
-      shell: pwsh
-      run: ./scripts/evaluatetest.ps1
-    
+
     - name: Upload Smoketest Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: gitsqlite-windows-amd64
         path: /**/smoketest*
         retention-days: 2
+
+    - name: Evaluate test results
+      shell: pwsh
+      run: ./scripts/evaluatetest.ps1 -Cleanup
+    
+
