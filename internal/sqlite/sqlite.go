@@ -125,29 +125,21 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 	fullDump := stdout.String()
 
 	// Convert CRLF to LF for platform independence
-	cleanDump := strings.ReplaceAll(fullDump, "\r\n", "\n")
-
-	// Filter out sqlite_sequence table lines
+	cleanDump := strings.ReplaceAll(fullDump, "\r\n", "\n")	// Filter out sqlite_sequence table lines
 	lines := strings.Split(cleanDump, "\n")
 	var filteredLines []string
 
-	skipLine := false
 	for _, line := range lines {
-		// Skip CREATE TABLE sqlite_sequence and its INSERT statements
+		// Skip CREATE TABLE sqlite_sequence line
 		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
-			skipLine = true
 			continue
 		}
-		if skipLine && strings.HasPrefix(line, "INSERT INTO \"sqlite_sequence\"") {
+		// Skip INSERT INTO sqlite_sequence lines
+		if strings.Contains(line, "INSERT INTO sqlite_sequence") || strings.Contains(line, "INSERT INTO \"sqlite_sequence\"") {
 			continue
-		}
-		if skipLine && (strings.TrimSpace(line) == "" || !strings.HasPrefix(line, "INSERT INTO \"sqlite_sequence\"")) {
-			skipLine = false
 		}
 
-		if !skipLine {
-			filteredLines = append(filteredLines, line)
-		}
+		filteredLines = append(filteredLines, line)
 	}
 
 	// Write the filtered output

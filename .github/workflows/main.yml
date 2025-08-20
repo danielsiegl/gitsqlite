@@ -194,16 +194,16 @@ jobs:
       run: ./scripts/createtestdatabase.ps1
     
     - name: Run integrated smoketest on Windows
-      shell: pwsh
+      shell: cmd
       run: |
-        Write-Host "Step 1: Database -> SQL (clean)"
-        Get-Content smoketest.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output1.sql
+        echo Step 1: Database - SQL (clean)
+        bin\gitsqlite-windows-amd64.exe clean < smoketest.db > smoketest_output1.sql
         
-        Write-Host "Step 2: SQL -> Database (smudge)"
-        Get-Content smoketest_output1.sql | ./bin/gitsqlite-windows-amd64.exe smudge > smoketest_output2.db
+        echo Step 2: SQL - Database (smudge)
+        bin\gitsqlite-windows-amd64.exe smudge < smoketest_output1.sql > smoketest_output2.db
     
-        Write-Host "Step 3: Database -> SQL (clean again)"
-        Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output2.sql
+        echo Step 3: Database - SQL (clean again)
+        bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db > smoketest_output2.sql
     
     - name: Evaluate test results
       shell: pwsh
