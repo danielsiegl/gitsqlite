@@ -175,63 +175,63 @@ jobs:
         name: gitsqlite-binaries
         path: bin
     
-    - name: Check SQLite3 availability
-      shell: pwsh
-      run: |
-        $sqliteFound = $false
+    # - name: Check SQLite3 availability
+    #   shell: pwsh
+    #   run: |
+    #     $sqliteFound = $false
         
-        # Try sqlite3 --version first
-        try {
-          $version = sqlite3 --version
-          Write-Host "SQLite3 is already available: $version"
-          $sqliteFound = $true
-        } catch {
-          # Try sqlite3 -version as alternative
-          try {
-            $version = sqlite3 -version
-            Write-Host "SQLite3 is available with -version flag: $version"
-            $sqliteFound = $true
-          } catch {
-            Write-Host "SQLite3 not found in PATH with standard flags"
-          }
-        }
+    #     # Try sqlite3 --version first
+    #     try {
+    #       $version = sqlite3 --version
+    #       Write-Host "SQLite3 is already available: $version"
+    #       $sqliteFound = $true
+    #     } catch {
+    #       # Try sqlite3 -version as alternative
+    #       try {
+    #         $version = sqlite3 -version
+    #         Write-Host "SQLite3 is available with -version flag: $version"
+    #         $sqliteFound = $true
+    #       } catch {
+    #         Write-Host "SQLite3 not found in PATH with standard flags"
+    #       }
+    #     }
         
-        if (-not $sqliteFound) {
-          Write-Host "Checking if sqlite3.exe is available..."
-          if (Get-Command sqlite3.exe -ErrorAction SilentlyContinue) {
-            try {
-              $version = sqlite3.exe --version
-              Write-Host "Found sqlite3.exe: $version"
-              $sqliteFound = $true
-            } catch {
-              try {
-                $version = sqlite3.exe -version
-                Write-Host "Found sqlite3.exe with -version flag: $version"
-                $sqliteFound = $true
-              } catch {
-                Write-Host "sqlite3.exe found but version check failed"
-              }
-            }
-          }
-        }
+    #     if (-not $sqliteFound) {
+    #       Write-Host "Checking if sqlite3.exe is available..."
+    #       if (Get-Command sqlite3.exe -ErrorAction SilentlyContinue) {
+    #         try {
+    #           $version = sqlite3.exe --version
+    #           Write-Host "Found sqlite3.exe: $version"
+    #           $sqliteFound = $true
+    #         } catch {
+    #           try {
+    #             $version = sqlite3.exe -version
+    #             Write-Host "Found sqlite3.exe with -version flag: $version"
+    #             $sqliteFound = $true
+    #           } catch {
+    #             Write-Host "sqlite3.exe found but version check failed"
+    #           }
+    #         }
+    #       }
+    #     }
         
-        if (-not $sqliteFound) {
-          Write-Host "SQLite3 not found, attempting installation via WinGet..."
-          try {
-            winget install SQLite.SQLite3 --accept-package-agreements --accept-source-agreements
-            Write-Host "SQLite3 installation completed"
+    #     if (-not $sqliteFound) {
+    #       Write-Host "SQLite3 not found, attempting installation via WinGet..."
+    #       try {
+    #         winget install SQLite.SQLite3 --accept-package-agreements --accept-source-agreements
+    #         Write-Host "SQLite3 installation completed"
             
-            # Verify installation
-            try {
-              $version = sqlite3 --version
-              Write-Host "SQLite3 successfully installed: $version"
-            } catch {
-              Write-Error "SQLite3 installation verification failed - this may cause test failures"
-            }
-          } catch {
-            Write-Error "Failed to install SQLite3 via WinGet - this may cause test failures"
-          }
-        }
+    #         # Verify installation
+    #         try {
+    #           $version = sqlite3 --version
+    #           Write-Host "SQLite3 successfully installed: $version"
+    #         } catch {
+    #           Write-Error "SQLite3 installation verification failed - this may cause test failures"
+    #         }
+    #       } catch {
+    #         Write-Error "Failed to install SQLite3 via WinGet - this may cause test failures"
+    #       }
+    #     }
     
     - name: Create test database
       shell: pwsh
