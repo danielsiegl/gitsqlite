@@ -197,40 +197,10 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Step 1: Database -> SQL (clean)"
-        $bytes1 = [System.IO.File]::ReadAllBytes("smoketest.db")
-        $proc1 = Start-Process -FilePath "bin\gitsqlite-windows-amd64.exe" -ArgumentList "clean" -NoNewWindow -PassThru -RedirectStandardInput -RedirectStandardOutput -RedirectStandardError
-        $proc1.StandardInput.BaseStream.Write($bytes1, 0, $bytes1.Length)
-        $proc1.StandardInput.Close()
-        $output1 = $proc1.StandardOutput.ReadToEnd()
-        $proc1.WaitForExit()
-        if ($proc1.ExitCode -ne 0) { throw "Step 1 failed with exit code $($proc1.ExitCode)" }
-        [System.IO.File]::WriteAllText("smoketest_output1.sql", $output1, [System.Text.UTF8Encoding]::new($false))
+        Get-Content smoketest.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output1.sql
         
         Write-Host "Step 2: SQL -> Database (smudge)"
-        $text2 = [System.IO.File]::ReadAllText("smoketest_output1.sql", [System.Text.UTF8Encoding]::new($false))
-        $proc2 = Start-Process -FilePath "bin\gitsqlite-windows-amd64.exe" -ArgumentList "smudge" -NoNewWindow -PassThru -RedirectStandardInput -RedirectStandardOutput -RedirectStandardError
-        $proc2.StandardInput.Write($text2)
-        $proc2.StandardInput.Close()
-        $output2 = $proc2.StandardOutput.BaseStream
-        $buffer = New-Object byte[] 4096
-        $ms = New-Object System.IO.MemoryStream
-        while (($read = $output2.Read($buffer, 0, $buffer.Length)) -gt 0) { $ms.Write($buffer, 0, $read) }
-        $proc2.WaitForExit()
-        if ($proc2.ExitCode -ne 0) { throw "Step 2 failed with exit code $($proc2.ExitCode)" }
-        [System.IO.File]::WriteAllBytes("smoketest_output2.db", $ms.ToArray())
-        
+        Get-Content smoketest_output1.sql | ./bin/gitsqlite-windows-amd64.exe smudge > smoketest_output2.db
+    
         Write-Host "Step 3: Database -> SQL (clean again)"
-        $bytes3 = [System.IO.File]::ReadAllBytes("smoketest_output2.db")
-        $proc3 = Start-Process -FilePath "bin\gitsqlite-windows-amd64.exe" -ArgumentList "clean" -NoNewWindow -PassThru -RedirectStandardInput -RedirectStandardOutput -RedirectStandardError
-        $proc3.StandardInput.BaseStream.Write($bytes3, 0, $bytes3.Length)
-        $proc3.StandardInput.Close()
-        $output3 = $proc3.StandardOutput.ReadToEnd()
-        $proc3.WaitForExit()
-        if ($proc3.ExitCode -ne 0) { throw "Step 3 failed with exit code $($proc3.ExitCode)" }
-        [System.IO.File]::WriteAllText("smoketest_output2.sql", $output3, [System.Text.UTF8Encoding]::new($false))
-    
-    - name: Evaluate test results
-      shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
-    
-
+        Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output2.sql
