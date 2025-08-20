@@ -197,13 +197,17 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Step 1: Database -> SQL (clean)"
-        cmd /c "bin\gitsqlite-windows-amd64.exe clean < smoketest.db > smoketest_output1.sql"
+        $output1 = & "bin\gitsqlite-windows-amd64.exe" clean < smoketest.db
+        [System.IO.File]::WriteAllText("smoketest_output1.sql", $output1, [System.Text.UTF8Encoding]::new($false))
         
         Write-Host "Step 2: SQL -> Database (smudge)"
-        cmd /c "bin\gitsqlite-windows-amd64.exe smudge < smoketest_output1.sql > smoketest_output2.db"
+        $input1 = [System.IO.File]::ReadAllText("smoketest_output1.sql", [System.Text.UTF8Encoding]::new($false))
+        $output2 = $input1 | & "bin\gitsqlite-windows-amd64.exe" smudge
+        [System.IO.File]::WriteAllBytes("smoketest_output2.db", $output2)
         
         Write-Host "Step 3: Database -> SQL (clean again)"
-        cmd /c "bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db > smoketest_output2.sql"
+        $output3 = & "bin\gitsqlite-windows-amd64.exe" clean < smoketest_output2.db
+        [System.IO.File]::WriteAllText("smoketest_output2.sql", $output3, [System.Text.UTF8Encoding]::new($false))
     
     - name: Evaluate test results
       shell: pwsh
