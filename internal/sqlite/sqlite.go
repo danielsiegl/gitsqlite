@@ -10,7 +10,6 @@
 package sqlite
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -119,11 +118,6 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 
 	slog.Debug("Found user tables", "count", len(userTables))
 
-	// Write SQLite dump header
-	if _, err := out.Write([]byte("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n")); err != nil {
-		return fmt.Errorf("failed to write dump header: %w", err)
-	}
-
 	// Process tables in batches to avoid command line length limits
 	batchSize := 50 // Increased from 20 since our implementation already handles this
 	for i := 0; i < len(userTables); i += batchSize {
@@ -138,11 +132,6 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 		if err := e.dumpTableBatch(ctx, binaryPath, dbPath, batch, out); err != nil {
 			return fmt.Errorf("failed to dump table batch: %w", err)
 		}
-	}
-
-	// Write SQLite dump footer
-	if _, err := out.Write([]byte("COMMIT;\n")); err != nil {
-		return fmt.Errorf("failed to write dump footer: %w", err)
 	}
 
 	slog.Debug("DumpSelectiveTables completed successfully")
@@ -185,7 +174,7 @@ func (e *Engine) getUserTables(ctx context.Context, dbPath string) ([]string, er
 	return tables, nil
 }
 
-// dumpTableBatch dumps a batch of tables using SQLite .dump command with streaming output
+// dumpTableBatch dumps a batch of tables using SQLite .dump command with pure streaming
 func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, tables []string, out io.Writer) error {
 	if len(tables) == 0 {
 		return nil
@@ -206,55 +195,13 @@ func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, 
 
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = strings.NewReader(script)
+	cmd.Stdout = out // Direct streaming - let SQLite handle it
 
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 
-	// Create a pipe to capture and filter the output
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start SQLite command: %w", err)
-	}
-
-	// Filter out the PRAGMA and transaction statements that SQLite adds for each batch
-	// Use bufio.Scanner for line-by-line processing but with larger buffer to handle large lines
-	scanner := bufio.NewScanner(stdout)
-	
-	// Increase the scanner buffer size to handle very large lines (like big INSERT statements)
-	const maxScanTokenSize = 64 * 1024 * 1024 // 64MB buffer for very large SQL statements
-	buf := make([]byte, 0, maxScanTokenSize)
-	scanner.Buffer(buf, maxScanTokenSize)
-	
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Skip the headers that SQLite adds to each .dump command
-		if strings.HasPrefix(line, "PRAGMA foreign_keys=OFF;") ||
-			strings.HasPrefix(line, "BEGIN TRANSACTION;") ||
-			line == "COMMIT;" {
-			continue
-		}
-
-		// Write the line with proper error handling for partial writes
-		lineBytes := []byte(line + "\n")
-		written := 0
-		for written < len(lineBytes) {
-			n, err := out.Write(lineBytes[written:])
-			written += n
-			if err != nil {
-				return fmt.Errorf("failed to write output: %w", err)
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading SQLite output: %w", err)
-	}
-
-	if err := cmd.Wait(); err != nil {
+	// Pure streaming approach - no filtering, no buffering
+	if err := cmd.Run(); err != nil {
 		stderrOutput := stderr.String()
 		if stderrOutput != "" {
 			return fmt.Errorf("SQLite batch dump failed: %s: %w", stderrOutput, err)
