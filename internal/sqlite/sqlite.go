@@ -93,7 +93,7 @@ func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
 	return nil
 }
 
-// DumpSelectiveTables dumps only user tables (excluding sqlite_sequence) using SQLite native commands
+// DumpSelectiveTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
 func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.Writer) error {
 	slog.Debug("DumpSelectiveTables method called")
 
@@ -103,129 +103,58 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 		return fmt.Errorf("SQLite binary not found: %w", err)
 	}
 
-	// Get list of user tables (excluding sqlite_* system tables)
-	userTables, err := e.getUserTables(ctx, dbPath)
-	if err != nil {
-		return fmt.Errorf("failed to get user tables: %w", err)
+	// Simply run .dump and capture all output
+	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	slog.Debug("Starting SQLite .dump command")
+
+	if err := cmd.Run(); err != nil {
+		stderrOutput := stderr.String()
+		if stderrOutput != "" {
+			return fmt.Errorf("SQLite dump failed: %s: %w", stderrOutput, err)
+		}
+		return fmt.Errorf("SQLite dump failed: %w", err)
 	}
 
-	if len(userTables) == 0 {
-		slog.Debug("No user tables found, performing empty dump")
-		// Write minimal SQLite dump structure with explicit LF-only line endings
-		_, err := out.Write([]byte{'P', 'R', 'A', 'G', 'M', 'A', ' ', 'f', 'o', 'r', 'e', 'i', 'g', 'n', '_', 'k', 'e', 'y', 's', '=', 'O', 'F', 'F', ';', 0x0A, 'B', 'E', 'G', 'I', 'N', ' ', 'T', 'R', 'A', 'N', 'S', 'A', 'C', 'T', 'I', 'O', 'N', ';', 0x0A, 'C', 'O', 'M', 'M', 'I', 'T', ';', 0x0A})
-		return err
-	}
+	// Get the full dump output and filter out sqlite_sequence table
+	fullDump := stdout.String()
 
-	slog.Debug("Found user tables", "count", len(userTables))
+	// Convert CRLF to LF for platform independence
+	cleanDump := strings.ReplaceAll(fullDump, "\r\n", "\n")
 
-	// Write our own transaction header once with explicit LF-only line endings
-	if _, err := out.Write([]byte{'P', 'R', 'A', 'G', 'M', 'A', ' ', 'f', 'o', 'r', 'e', 'i', 'g', 'n', '_', 'k', 'e', 'y', 's', '=', 'O', 'F', 'F', ';', 0x0A, 'B', 'E', 'G', 'I', 'N', ' ', 'T', 'R', 'A', 'N', 'S', 'A', 'C', 'T', 'I', 'O', 'N', ';', 0x0A}); err != nil {
-		return fmt.Errorf("failed to write dump header: %w", err)
-	}
+	// Filter out sqlite_sequence table lines
+	lines := strings.Split(cleanDump, "\n")
+	var filteredLines []string
 
-	// Dump each table's schema and data without SQLite's transaction wrapper
-	for i, table := range userTables {
-		slog.Debug("Processing table", "table", table, "progress", fmt.Sprintf("%d/%d", i+1, len(userTables)))
+	skipLine := false
+	for _, line := range lines {
+		// Skip CREATE TABLE sqlite_sequence and its INSERT statements
+		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
+			skipLine = true
+			continue
+		}
+		if skipLine && strings.HasPrefix(line, "INSERT INTO \"sqlite_sequence\"") {
+			continue
+		}
+		if skipLine && (strings.TrimSpace(line) == "" || !strings.HasPrefix(line, "INSERT INTO \"sqlite_sequence\"")) {
+			skipLine = false
+		}
 
-		if err := e.dumpTableSchemaAndData(ctx, binaryPath, dbPath, table, out); err != nil {
-			return fmt.Errorf("failed to dump table %s: %w", table, err)
+		if !skipLine {
+			filteredLines = append(filteredLines, line)
 		}
 	}
 
-	// Write our own transaction footer once with explicit LF-only line endings
-	if _, err := out.Write([]byte{'C', 'O', 'M', 'M', 'I', 'T', ';', 0x0A}); err != nil {
-		return fmt.Errorf("failed to write dump footer: %w", err)
-	}
+	// Write the filtered output
+	filteredDump := strings.Join(filteredLines, "\n")
+	_, err = out.Write([]byte(filteredDump))
 
 	slog.Debug("DumpSelectiveTables completed successfully")
-	return nil
-}
-
-// getUserTables gets the list of user tables (excluding sqlite_* system tables)
-func (e *Engine) getUserTables(ctx context.Context, dbPath string) ([]string, error) {
-	binaryPath, err := e.getCachedPath()
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := exec.CommandContext(ctx, binaryPath, dbPath, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")
-
-	var stdout strings.Builder
-	var stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		stderrOutput := stderr.String()
-		if stderrOutput != "" {
-			return nil, fmt.Errorf("failed to query tables: %s: %w", stderrOutput, err)
-		}
-		return nil, fmt.Errorf("failed to query tables: %w", err)
-	}
-
-	output := strings.TrimSpace(stdout.String())
-	if output == "" {
-		return []string{}, nil
-	}
-
-	tables := strings.Split(output, "\n")
-	// Clean up any extra whitespace
-	for i, table := range tables {
-		tables[i] = strings.TrimSpace(table)
-	}
-
-	return tables, nil
-}
-
-// dumpTableSchemaAndData dumps a single table's schema and data without transaction wrappers
-func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath, table string, out io.Writer) error {
-	// First dump the schema - always capture output and normalize line endings
-	schemaScript := fmt.Sprintf(".schema %s\n", table)
-
-	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
-	cmd.Stdin = strings.NewReader(schemaScript)
-
-	var stdout strings.Builder
-	var stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		stderrOutput := stderr.String()
-		if stderrOutput != "" {
-			return fmt.Errorf("SQLite schema dump failed: %s: %w", stderrOutput, err)
-		}
-		return fmt.Errorf("SQLite schema dump failed: %w", err)
-	}
-
-	// Always convert CRLF to LF for platform independence
-	cleanOutput := strings.ReplaceAll(stdout.String(), "\r\n", "\n")
-	if _, err := out.Write([]byte(cleanOutput)); err != nil {
-		return err
-	}
-
-	// Then dump the data in INSERT format - always capture and normalize
-	dataScript := fmt.Sprintf(".mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
-
-	cmd = exec.CommandContext(ctx, binaryPath, dbPath)
-	cmd.Stdin = strings.NewReader(dataScript)
-
-	stdout.Reset()
-	stderr.Reset()
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		stderrOutput := stderr.String()
-		if stderrOutput != "" {
-			return fmt.Errorf("SQLite data dump failed: %s: %w", stderrOutput, err)
-		}
-		return fmt.Errorf("SQLite data dump failed: %w", err)
-	}
-
-	// Always convert CRLF to LF for platform independence
-	cleanOutput = strings.ReplaceAll(stdout.String(), "\r\n", "\n")
-	_, err := out.Write([]byte(cleanOutput))
 	return err
 }
 
