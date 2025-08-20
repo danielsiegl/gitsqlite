@@ -204,3 +204,8 @@ jobs:
     
         Write-Host "Step 3: Database -> SQL (clean again)"
         Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output2.sql
+
+    - name: Evaluate test results
+      shell: pwsh
+      run: ./scripts/evaluatetest.ps1 -Cleanup
+    
