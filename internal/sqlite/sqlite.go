@@ -179,19 +179,15 @@ func (e *Engine) getUserTables(ctx context.Context, dbPath string) ([]string, er
 
 // dumpTableSchemaAndData dumps a single table's schema and data without transaction wrappers
 func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath, table string, out io.Writer) error {
-	// First dump the schema
-	var schemaScript string
-	if runtime.GOOS == "windows" {
-		schemaScript = fmt.Sprintf(".crlf OFF\n.schema %s\n", table)
-	} else {
-		schemaScript = fmt.Sprintf(".schema %s\n", table)
-	}
+	// First dump the schema - always capture output and normalize line endings
+	schemaScript := fmt.Sprintf(".schema %s\n", table)
 
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = strings.NewReader(schemaScript)
-	cmd.Stdout = out
 
+	var stdout strings.Builder
 	var stderr strings.Builder
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
@@ -202,19 +198,21 @@ func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath,
 		return fmt.Errorf("SQLite schema dump failed: %w", err)
 	}
 
-	// Then dump the data in INSERT format
-	var dataScript string
-	if runtime.GOOS == "windows" {
-		dataScript = fmt.Sprintf(".crlf OFF\n.mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
-	} else {
-		dataScript = fmt.Sprintf(".mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
+	// Always convert CRLF to LF for platform independence
+	cleanOutput := strings.ReplaceAll(stdout.String(), "\r\n", "\n")
+	if _, err := out.Write([]byte(cleanOutput)); err != nil {
+		return err
 	}
+
+	// Then dump the data in INSERT format - always capture and normalize
+	dataScript := fmt.Sprintf(".mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
 
 	cmd = exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = strings.NewReader(dataScript)
-	cmd.Stdout = out
 
+	stdout.Reset()
 	stderr.Reset()
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
@@ -225,7 +223,10 @@ func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath,
 		return fmt.Errorf("SQLite data dump failed: %w", err)
 	}
 
-	return nil
+	// Always convert CRLF to LF for platform independence
+	cleanOutput = strings.ReplaceAll(stdout.String(), "\r\n", "\n")
+	_, err := out.Write([]byte(cleanOutput))
+	return err
 }
 
 // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
