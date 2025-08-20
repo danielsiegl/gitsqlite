@@ -197,13 +197,44 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Step 1: Database -> SQL (clean)"
-        Get-Content smoketest.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output1.sql
+        $cleanOutput1 = Get-Content smoketest.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean
+        [System.IO.File]::WriteAllText("smoketest_output1.sql", $cleanOutput1, [System.Text.UTF8Encoding]::new($false))
         
         Write-Host "Step 2: SQL -> Database (smudge)"
-        Get-Content smoketest_output1.sql | ./bin/gitsqlite-windows-amd64.exe smudge > smoketest_output2.db
-    
+        $sqlContent = [System.IO.File]::ReadAllText("smoketest_output1.sql", [System.Text.UTF8Encoding]::new($false))
+        
+        # Create a process to handle binary output properly
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "./bin/gitsqlite-windows-amd64.exe"
+        $psi.Arguments = "smudge"
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardInput = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $proc.StandardInput.Write($sqlContent)
+        $proc.StandardInput.Close()
+        
+        # Read binary output
+        $outputStream = $proc.StandardOutput.BaseStream
+        $buffer = New-Object byte[] 4096
+        $ms = New-Object System.IO.MemoryStream
+        while (($read = $outputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $ms.Write($buffer, 0, $read)
+        }
+        $proc.WaitForExit()
+        
+        if ($proc.ExitCode -ne 0) {
+            throw "Step 2 failed with exit code $($proc.ExitCode)"
+        }
+        
+        [System.IO.File]::WriteAllBytes("smoketest_output2.db", $ms.ToArray())
+        $ms.Close()
+        
         Write-Host "Step 3: Database -> SQL (clean again)"
-        Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean > smoketest_output2.sql
+        $cleanOutput2 = Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean
+        [System.IO.File]::WriteAllText("smoketest_output2.sql", $cleanOutput2, [System.Text.UTF8Encoding]::new($false))
 
     - name: Evaluate test results
       shell: pwsh
