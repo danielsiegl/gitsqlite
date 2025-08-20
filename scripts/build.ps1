@@ -100,7 +100,6 @@ Build-GoApplication -GOOS "windows"
 Build-GoApplication -GOOS "windows" -GOARCH "arm64"
 
 # Build for macOS on M1,M2,M3,..
-Build-GoApplication -GOOS "darwin"
 Build-GoApplication -GOOS "darwin" -GOARCH "arm64"
 
 Write-Output "All builds complete copied to bin directory"

@@ -131,8 +131,7 @@ jobs:
                 Build-Platform -GOOS "linux" -GOARCH "amd64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
                 Build-Platform -GOOS "linux" -GOARCH "arm64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
                 Build-Platform -GOOS "windows" -GOARCH "amd64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
-                Build-Platform -GOOS "windows" -GOARCH "arm64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
-                Build-Platform -GOOS "darwin" -GOARCH "amd64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
+                Build-Platform -GOOS "windows" -GOARCH "arm64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version 
                 Build-Platform -GOOS "darwin" -GOARCH "arm64" -GitCommit $gitCommit -GitBranch $gitBranch -BuildTime $buildTime -Version $version
                 
                 Write-Host "✓ All builds completed successfully!" -ForegroundColor Green
@@ -183,16 +182,6 @@ jobs:
             asset_name: gitsqlite-windows-arm64.exe
             tag: ${{ github.ref }}
             overwrite: true
-
-        - name: Upload macOS AMD64 Binary
-          uses: svenstaro/upload-release-action@2.9.0
-          with:
-            repo_token: ${{ secrets.GITHUB_TOKEN }}
-            file: bin/gitsqlite-macos-amd64
-            asset_name: gitsqlite-macos-amd64
-            tag: ${{ github.ref }}
-            overwrite: true
-
         - name: Upload macOS ARM64 Binary
           uses: svenstaro/upload-release-action@2.9.0
           with:
