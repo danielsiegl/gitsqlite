@@ -108,8 +108,8 @@ if ((Test-Path $File1) -and (Test-Path $File2)) {
     Write-Host "  $File2`: $(if ($file2HasCRLF) { "CONTAINS CRLF" } else { "LF only" })"
 
     if ($file1HasCRLF -or $file2HasCRLF) {
-        $testsFailed += "One or both output files contain CRLF line endings (should be LF only)"
-        Write-Host "FAILED: One or both output files contain CRLF line endings (should be LF only)" -ForegroundColor Red
+        $testsFailed += "One or both output files contain CRLF line endings (should be LF only for Git compatibility)"
+        Write-Host "FAILED: One or both output files contain CRLF line endings (should be LF only for Git compatibility)" -ForegroundColor Red
     } else {
         Write-Host "✅ CRLF check: Both files use LF-only line endings"
     }
