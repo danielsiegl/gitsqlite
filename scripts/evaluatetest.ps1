@@ -18,12 +18,15 @@ param(
 
 Write-Host "Step 4: Comparing SQL outputs"
 
+# Initialize test failure tracking
+$testsFailed = @()
+
 # Check if files exist
 if (-not (Test-Path $File1) -or -not (Test-Path $File2)) {
+    $testsFailed += "One or both output files missing"
     Write-Error "FAILED: One or both output files missing"
     Write-Host "  File1: $File1 - $(if (Test-Path $File1) { "EXISTS" } else { "MISSING" })"
     Write-Host "  File2: $File2 - $(if (Test-Path $File2) { "EXISTS" } else { "MISSING" })"
-    exit 1
 }
 
 # Compare file contents first
@@ -32,6 +35,7 @@ $file1Content = Get-Content $File1 -Raw
 $file2Content = Get-Content $File2 -Raw
 
 if ($file1Content -ne $file2Content) {
+    $testsFailed += "Round-trip test failed - file contents differ"
     Write-Error "FAILED: Round-trip test failed - file contents differ"
     
     # Show file size information first
@@ -68,11 +72,9 @@ if ($file1Content -ne $file2Content) {
     if ($diffCount -eq 10) {
         Write-Host "  ... (showing only first 10 differences)"
     }
-    
-    exit 1
+} else {
+    Write-Host "✅ Content comparison: Files are identical"
 }
-
-Write-Host "✅ Content comparison: Files are identical"
 
 # Check for CRLF line endings
 Write-Host "Checking for CRLF line endings:"
@@ -101,11 +103,11 @@ Write-Host "  $File1`: $(if ($file1HasCRLF) { "CONTAINS CRLF" } else { "LF only"
 Write-Host "  $File2`: $(if ($file2HasCRLF) { "CONTAINS CRLF" } else { "LF only" })"
 
 if ($file1HasCRLF -or $file2HasCRLF) {
+    $testsFailed += "One or both output files contain CRLF line endings (should be LF only)"
     Write-Error "FAILED: One or both output files contain CRLF line endings (should be LF only)"
-    exit 1
+} else {
+    Write-Host "✅ CRLF check: Both files use LF-only line endings"
 }
-
-Write-Host "✅ CRLF check: Both files use LF-only line endings"
 
 # Check file sizes (final validation)
 $size1 = (Get-Item $File1).Length
@@ -117,20 +119,28 @@ Write-Host "  $File2`: $size2 bytes"
 
 # Check if files are empty
 if ($size1 -eq 0 -or $size2 -eq 0) {
+    $testsFailed += "One or both output files are empty (0 bytes)"
     Write-Error "FAILED: One or both output files are empty (0 bytes)"
-    exit 1
 }
 
 # Check if file sizes differ
 if ($size1 -ne $size2) {
     $sizeDiff = $size2 - $size1
+    $testsFailed += "File sizes differ by $sizeDiff bytes"
     Write-Error "FAILED: File sizes differ by $sizeDiff bytes"
-    exit 1
+} else {
+    Write-Host "✅ File size check: Both files are $size1 bytes"
 }
 
-Write-Host "✅ File size check: Both files are $size1 bytes"
-
-Write-Host "SUCCESS: Round-trip test passed - files are identical (content, size, and line endings)" -ForegroundColor Green
+# Final result evaluation
+if ($testsFailed.Count -eq 0) {
+    Write-Host "SUCCESS: Round-trip test passed - files are identical (content, size, and line endings)" -ForegroundColor Green
+} else {
+    Write-Host "FAILURE SUMMARY:" -ForegroundColor Red
+    foreach ($failure in $testsFailed) {
+        Write-Host "  - $failure" -ForegroundColor Red
+    }
+}
 
 # Cleanup if requested
 if ($Cleanup) {
@@ -143,4 +153,9 @@ if ($Cleanup) {
     }
 }
 
-Write-Host "✅ Evaluation completed successfully"
+Write-Host "✅ Evaluation completed $(if ($testsFailed.Count -eq 0) { "successfully" } else { "with $($testsFailed.Count) failure(s)" })"
+
+# Exit with error code if any tests failed
+if ($testsFailed.Count -gt 0) {
+    exit 1
+}
