@@ -208,7 +208,7 @@ jobs:
     - name: Upload Smoketest Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: gitsqlite-windows-amd64
+        name: smoketest-gitsqlite-windows-amd64
         path: /**/smoketest*
         retention-days: 2
 
