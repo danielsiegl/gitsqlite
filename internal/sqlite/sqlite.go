@@ -118,20 +118,23 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 
 	slog.Debug("Found user tables", "count", len(userTables))
 
-	// Process tables in batches to avoid command line length limits
-	batchSize := 50 // Increased from 20 since our implementation already handles this
-	for i := 0; i < len(userTables); i += batchSize {
-		end := i + batchSize
-		if end > len(userTables) {
-			end = len(userTables)
-		}
-		batch := userTables[i:end]
+	// Write our own transaction header once
+	if _, err := out.Write([]byte("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n")); err != nil {
+		return fmt.Errorf("failed to write dump header: %w", err)
+	}
 
-		slog.Debug("Processing table batch", "batch", (i/batchSize)+1, "tables", len(batch))
+	// Dump each table's schema and data without SQLite's transaction wrapper
+	for i, table := range userTables {
+		slog.Debug("Processing table", "table", table, "progress", fmt.Sprintf("%d/%d", i+1, len(userTables)))
 
-		if err := e.dumpTableBatch(ctx, binaryPath, dbPath, batch, out); err != nil {
-			return fmt.Errorf("failed to dump table batch: %w", err)
+		if err := e.dumpTableSchemaAndData(ctx, binaryPath, dbPath, table, out); err != nil {
+			return fmt.Errorf("failed to dump table %s: %w", table, err)
 		}
+	}
+
+	// Write our own transaction footer once
+	if _, err := out.Write([]byte("COMMIT;\n")); err != nil {
+		return fmt.Errorf("failed to write dump footer: %w", err)
 	}
 
 	slog.Debug("DumpSelectiveTables completed successfully")
@@ -174,43 +177,46 @@ func (e *Engine) getUserTables(ctx context.Context, dbPath string) ([]string, er
 	return tables, nil
 }
 
-// dumpTableBatch dumps a batch of tables using SQLite .dump command with pure streaming
-func (e *Engine) dumpTableBatch(ctx context.Context, binaryPath, dbPath string, tables []string, out io.Writer) error {
-	if len(tables) == 0 {
-		return nil
-	}
-
-	// Build the SQLite command script
-	tableList := strings.Join(tables, " ")
-
-	// Build script with cross-platform compatibility
-	// Note: .crlf command only exists on Windows SQLite builds
-	var script string
-	if runtime.GOOS == "windows" {
-		script = fmt.Sprintf(".crlf OFF\n.dump %s\n", tableList)
-	} else {
-		// On Unix systems, SQLite uses LF by default, so no .crlf command needed
-		script = fmt.Sprintf(".dump %s\n", tableList)
-	}
-
+// dumpTableSchemaAndData dumps a single table's schema and data without transaction wrappers
+func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath, table string, out io.Writer) error {
+	// First dump the schema
+	schemaScript := fmt.Sprintf(".crlf OFF\n.schema %s\n", table)
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
-	cmd.Stdin = strings.NewReader(script)
-	cmd.Stdout = out // Direct streaming - let SQLite handle it
+	cmd.Stdin = strings.NewReader(schemaScript)
+	cmd.Stdout = out
 
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 
-	// Pure streaming approach - no filtering, no buffering
 	if err := cmd.Run(); err != nil {
 		stderrOutput := stderr.String()
 		if stderrOutput != "" {
-			return fmt.Errorf("SQLite batch dump failed: %s: %w", stderrOutput, err)
+			return fmt.Errorf("SQLite schema dump failed: %s: %w", stderrOutput, err)
 		}
-		return fmt.Errorf("SQLite batch dump failed: %w", err)
+		return fmt.Errorf("SQLite schema dump failed: %w", err)
+	}
+
+	// Then dump the data in INSERT format
+	dataScript := fmt.Sprintf(".crlf OFF\n.mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
+	cmd = exec.CommandContext(ctx, binaryPath, dbPath)
+	cmd.Stdin = strings.NewReader(dataScript)
+	cmd.Stdout = out
+
+	stderr.Reset()
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		stderrOutput := stderr.String()
+		if stderrOutput != "" {
+			return fmt.Errorf("SQLite data dump failed: %s: %w", stderrOutput, err)
+		}
+		return fmt.Errorf("SQLite data dump failed: %w", err)
 	}
 
 	return nil
-} // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
+}
+
+// ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
 	_, err := e.GetPathWithPackageManager()
 	return err
