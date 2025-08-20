@@ -197,17 +197,13 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Step 1: Database -> SQL (clean)"
-        $output1 = & "bin\gitsqlite-windows-amd64.exe" clean < smoketest.db
-        [System.IO.File]::WriteAllText("smoketest_output1.sql", $output1, [System.Text.UTF8Encoding]::new($false))
+        .\bin\gitsqlite-windows-amd64.exe clean < smoketest.db | Out-File -FilePath smoketest_output1.sql -Encoding utf8NoBOM -NoNewline
         
         Write-Host "Step 2: SQL -> Database (smudge)"
-        $input1 = [System.IO.File]::ReadAllText("smoketest_output1.sql", [System.Text.UTF8Encoding]::new($false))
-        $output2 = $input1 | & "bin\gitsqlite-windows-amd64.exe" smudge
-        [System.IO.File]::WriteAllBytes("smoketest_output2.db", $output2)
+        .\bin\gitsqlite-windows-amd64.exe smudge < smoketest_output1.sql | Out-File -FilePath smoketest_output2.db -Encoding byte
         
         Write-Host "Step 3: Database -> SQL (clean again)"
-        $output3 = & "bin\gitsqlite-windows-amd64.exe" clean < smoketest_output2.db
-        [System.IO.File]::WriteAllText("smoketest_output2.sql", $output3, [System.Text.UTF8Encoding]::new($false))
+        .\bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db | Out-File -FilePath smoketest_output2.sql -Encoding utf8NoBOM -NoNewline
     
     - name: Evaluate test results
       shell: pwsh
