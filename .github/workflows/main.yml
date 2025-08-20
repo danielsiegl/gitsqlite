@@ -197,13 +197,13 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Step 1: Database -> SQL (clean)"
-        Get-Content smoketest.db -AsByteStream | .\bin\gitsqlite-windows-amd64.exe clean | Out-File -FilePath smoketest_output1.sql -Encoding utf8NoBOM
+        cmd /c "bin\gitsqlite-windows-amd64.exe clean < smoketest.db > smoketest_output1.sql"
         
         Write-Host "Step 2: SQL -> Database (smudge)"
-        Get-Content smoketest_output1.sql -Raw | .\bin\gitsqlite-windows-amd64.exe smudge | Set-Content smoketest_output2.db -AsByteStream
+        cmd /c "bin\gitsqlite-windows-amd64.exe smudge < smoketest_output1.sql > smoketest_output2.db"
         
         Write-Host "Step 3: Database -> SQL (clean again)"
-        Get-Content smoketest_output2.db -AsByteStream | .\bin\gitsqlite-windows-amd64.exe clean | Out-File -FilePath smoketest_output2.sql -Encoding utf8NoBOM
+        cmd /c "bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db > smoketest_output2.sql"
     
     - name: Evaluate test results
       shell: pwsh
