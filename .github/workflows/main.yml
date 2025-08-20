@@ -178,19 +178,15 @@ jobs:
     - name: Check SQLite3 availability
       shell: pwsh
       run: |
-        $sqliteFound = $false
-         
-        Write-Host "Checking if sqlite3.exe is available..."
-        if (Get-Command sqlite3.exe -ErrorAction SilentlyContinue) {
-            $version = sqlite3.exe --version
-            Write-Host "Found sqlite3.exe: $version"
-            $sqliteFound = $true
-        }
-        
-        if (-not $sqliteFound) {
-          Write-Host "SQLite3 not found, attempting installation via WinGet..."          
-          winget install SQLite.SQLite3 --accept-package-agreements --accept-source-agreements
-          Write-Host "SQLite3 installation completed"
+        Write-Host "Checking sqlite3.exe..."
+        $sqlite = Get-Command sqlite3.exe -ErrorAction SilentlyContinue
+        if (-not $sqlite) {
+          choco install sqlite -y
+          # path propagation can lag; invoke via absolute path to be safe
+          $exe = 'C:\ProgramData\chocolatey\bin\sqlite3.exe'
+          & $exe --version
+        } else {
+          & sqlite3.exe --version
         }
     
     - name: Create test database
