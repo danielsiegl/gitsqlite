@@ -180,7 +180,13 @@ func (e *Engine) getUserTables(ctx context.Context, dbPath string) ([]string, er
 // dumpTableSchemaAndData dumps a single table's schema and data without transaction wrappers
 func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath, table string, out io.Writer) error {
 	// First dump the schema
-	schemaScript := fmt.Sprintf(".crlf OFF\n.schema %s\n", table)
+	var schemaScript string
+	if runtime.GOOS == "windows" {
+		schemaScript = fmt.Sprintf(".crlf OFF\n.schema %s\n", table)
+	} else {
+		schemaScript = fmt.Sprintf(".schema %s\n", table)
+	}
+	
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = strings.NewReader(schemaScript)
 	cmd.Stdout = out
@@ -197,7 +203,13 @@ func (e *Engine) dumpTableSchemaAndData(ctx context.Context, binaryPath, dbPath,
 	}
 
 	// Then dump the data in INSERT format
-	dataScript := fmt.Sprintf(".crlf OFF\n.mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
+	var dataScript string
+	if runtime.GOOS == "windows" {
+		dataScript = fmt.Sprintf(".crlf OFF\n.mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
+	} else {
+		dataScript = fmt.Sprintf(".mode insert %s\nSELECT * FROM \"%s\";\n", table, table)
+	}
+	
 	cmd = exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = strings.NewReader(dataScript)
 	cmd.Stdout = out
