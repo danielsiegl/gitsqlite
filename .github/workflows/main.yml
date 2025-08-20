@@ -207,4 +207,11 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+    
+    - name: Upload Smoketest Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gitsqlite-windows-amd64
+        path: /**/smoketest*
+        retention-days: 2
