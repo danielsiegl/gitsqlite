@@ -200,7 +200,8 @@ jobs:
         Get-Content smoketest.db -AsByteStream | .\bin\gitsqlite-windows-amd64.exe clean | Set-Content smoketest_output1.sql -Encoding UTF8NoBOM
         
         Write-Host "Step 2: SQL -> Database (smudge)"
-        Get-Content smoketest_output1.sql -Raw | .\bin\gitsqlite-windows-amd64.exe smudge | Set-Content smoketest_output2.db -AsByteStream
+        $smudgeOutput = Get-Content smoketest_output1.sql -Raw | .\bin\gitsqlite-windows-amd64.exe smudge
+        [System.IO.File]::WriteAllBytes("smoketest_output2.db", $smudgeOutput)
         
         Write-Host "Step 3: Database -> SQL (clean again)"
         Get-Content smoketest_output2.db -AsByteStream | .\bin\gitsqlite-windows-amd64.exe clean | Set-Content smoketest_output2.sql -Encoding UTF8NoBOM
