@@ -56,43 +56,6 @@ func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) erro
 	return cmd.Run()
 }
 
-func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
-	// Add debug logging using slog
-	slog.Debug("Dump method called, starting cached path lookup")
-
-	// Use cached path lookup to avoid expensive repeated lookups
-	binaryPath, err := e.getCachedPath()
-	if err != nil {
-		return fmt.Errorf("SQLite binary not found: %w", err)
-	}
-
-	slog.Debug("Binary path found", "path", binaryPath)
-
-	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
-	cmd.Stdout = out
-
-	// Capture stderr to see SQLite error messages
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-
-	// Add debug logging using slog
-	slog.Debug("Starting SQLite command", "command", binaryPath, "database", dbPath)
-
-	err = cmd.Run()
-
-	slog.Debug("SQLite command completed", "error", err)
-	if err != nil {
-		stderrOutput := stderr.String()
-		slog.Debug("SQLite stderr output", "stderr", stderrOutput)
-		if stderrOutput != "" {
-			return fmt.Errorf("SQLite dump failed (exit code error): %s: %w", stderrOutput, err)
-		}
-		return fmt.Errorf("SQLite dump failed: %w", err)
-	}
-
-	return nil
-}
-
 // DumpSelectiveTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
 func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.Writer) error {
 	slog.Debug("DumpSelectiveTables method called")
@@ -125,7 +88,7 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 	fullDump := stdout.String()
 
 	// Convert CRLF to LF for platform independence
-	cleanDump := strings.ReplaceAll(fullDump, "\r\n", "\n")	// Filter out sqlite_sequence table lines
+	cleanDump := strings.ReplaceAll(fullDump, "\r\n", "\n") // Filter out sqlite_sequence table lines
 	lines := strings.Split(cleanDump, "\n")
 	var filteredLines []string
 
