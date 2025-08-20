@@ -24,7 +24,7 @@ $testsFailed = @()
 # Check if files exist
 if (-not (Test-Path $File1) -or -not (Test-Path $File2)) {
     $testsFailed += "One or both output files missing"
-    Write-Error "FAILED: One or both output files missing"
+    Write-Host "FAILED: One or both output files missing" -ForegroundColor Red
     Write-Host "  File1: $File1 - $(if (Test-Path $File1) { "EXISTS" } else { "MISSING" })"
     Write-Host "  File2: $File2 - $(if (Test-Path $File2) { "EXISTS" } else { "MISSING" })"
 }
@@ -37,7 +37,7 @@ if ((Test-Path $File1) -and (Test-Path $File2)) {
 
     if ($file1Content -ne $file2Content) {
         $testsFailed += "Round-trip test failed - file contents differ"
-        Write-Error "FAILED: Round-trip test failed - file contents differ"
+        Write-Host "FAILED: Round-trip test failed - file contents differ" -ForegroundColor Red
         
         # Show file size information first
         $size1 = (Get-Item $File1).Length
@@ -109,7 +109,7 @@ if ((Test-Path $File1) -and (Test-Path $File2)) {
 
     if ($file1HasCRLF -or $file2HasCRLF) {
         $testsFailed += "One or both output files contain CRLF line endings (should be LF only)"
-        Write-Error "FAILED: One or both output files contain CRLF line endings (should be LF only)"
+        Write-Host "FAILED: One or both output files contain CRLF line endings (should be LF only)" -ForegroundColor Red
     } else {
         Write-Host "✅ CRLF check: Both files use LF-only line endings"
     }
@@ -129,14 +129,14 @@ if ((Test-Path $File1) -and (Test-Path $File2)) {
     # Check if files are empty
     if ($size1 -eq 0 -or $size2 -eq 0) {
         $testsFailed += "One or both output files are empty (0 bytes)"
-        Write-Error "FAILED: One or both output files are empty (0 bytes)"
+        Write-Host "FAILED: One or both output files are empty (0 bytes)" -ForegroundColor Red
     }
 
     # Check if file sizes differ
     if ($size1 -ne $size2) {
         $sizeDiff = $size2 - $size1
         $testsFailed += "File sizes differ by $sizeDiff bytes"
-        Write-Error "FAILED: File sizes differ by $sizeDiff bytes"
+        Write-Host "FAILED: File sizes differ by $sizeDiff bytes" -ForegroundColor Red
     } else {
         Write-Host "✅ File size check: Both files are $size1 bytes"
     }
