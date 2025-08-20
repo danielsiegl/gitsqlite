@@ -40,21 +40,13 @@ if ($size1 -eq 0 -or $size2 -eq 0) {
     exit 1
 }
 
-# Check if file sizes differ
-if ($size1 -ne $size2) {
-    $sizeDiff = $size2 - $size1
-    Write-Error "FAILED: File sizes differ by $sizeDiff bytes"
-    exit 1
-}
-
-# Compare file contents
+# Compare file contents first
+Write-Host "Comparing file contents..."
 $file1Content = Get-Content $File1 -Raw
 $file2Content = Get-Content $File2 -Raw
 
-if ($file1Content -eq $file2Content) {
-    Write-Host "SUCCESS: Round-trip test passed - files are identical (same size and content)" -ForegroundColor Green
-} else {
-    Write-Error "FAILED: Round-trip test failed - files same size but content differs"
+if ($file1Content -ne $file2Content) {
+    Write-Error "FAILED: Round-trip test failed - file contents differ"
     
     # Show first few differences for debugging
     Write-Host "Content comparison details:"
@@ -79,6 +71,52 @@ if ($file1Content -eq $file2Content) {
     
     exit 1
 }
+
+Write-Host "✅ Content comparison: Files are identical"
+
+# Check for CRLF line endings
+Write-Host "Checking for CRLF line endings:"
+$file1Bytes = [System.IO.File]::ReadAllBytes($File1)
+$file2Bytes = [System.IO.File]::ReadAllBytes($File2)
+
+$file1HasCRLF = $false
+$file2HasCRLF = $false
+
+# Check for CRLF sequences (0x0D 0x0A)
+for ($i = 0; $i -lt $file1Bytes.Length - 1; $i++) {
+    if ($file1Bytes[$i] -eq 0x0D -and $file1Bytes[$i + 1] -eq 0x0A) {
+        $file1HasCRLF = $true
+        break
+    }
+}
+
+for ($i = 0; $i -lt $file2Bytes.Length - 1; $i++) {
+    if ($file2Bytes[$i] -eq 0x0D -and $file2Bytes[$i + 1] -eq 0x0A) {
+        $file2HasCRLF = $true
+        break
+    }
+}
+
+Write-Host "  $File1`: $(if ($file1HasCRLF) { "CONTAINS CRLF" } else { "LF only" })"
+Write-Host "  $File2`: $(if ($file2HasCRLF) { "CONTAINS CRLF" } else { "LF only" })"
+
+if ($file1HasCRLF -or $file2HasCRLF) {
+    Write-Error "FAILED: One or both output files contain CRLF line endings (should be LF only)"
+    exit 1
+}
+
+Write-Host "✅ CRLF check: Both files use LF-only line endings"
+
+# Check if file sizes differ
+if ($size1 -ne $size2) {
+    $sizeDiff = $size2 - $size1
+    Write-Error "FAILED: File sizes differ by $sizeDiff bytes"
+    exit 1
+}
+
+Write-Host "✅ File size check: Both files are $size1 bytes"
+
+Write-Host "SUCCESS: Round-trip test passed - files are identical (content, size, and line endings)" -ForegroundColor Green
 
 # Cleanup if requested
 if ($Cleanup) {
