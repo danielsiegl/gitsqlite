@@ -111,15 +111,15 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 
 	if len(userTables) == 0 {
 		slog.Debug("No user tables found, performing empty dump")
-		// Write minimal SQLite dump structure
-		_, err := out.Write([]byte("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\nCOMMIT;\n"))
+		// Write minimal SQLite dump structure with explicit LF-only line endings
+		_, err := out.Write([]byte{'P', 'R', 'A', 'G', 'M', 'A', ' ', 'f', 'o', 'r', 'e', 'i', 'g', 'n', '_', 'k', 'e', 'y', 's', '=', 'O', 'F', 'F', ';', 0x0A, 'B', 'E', 'G', 'I', 'N', ' ', 'T', 'R', 'A', 'N', 'S', 'A', 'C', 'T', 'I', 'O', 'N', ';', 0x0A, 'C', 'O', 'M', 'M', 'I', 'T', ';', 0x0A})
 		return err
 	}
 
 	slog.Debug("Found user tables", "count", len(userTables))
 
-	// Write our own transaction header once
-	if _, err := out.Write([]byte("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n")); err != nil {
+	// Write our own transaction header once with explicit LF-only line endings
+	if _, err := out.Write([]byte{'P', 'R', 'A', 'G', 'M', 'A', ' ', 'f', 'o', 'r', 'e', 'i', 'g', 'n', '_', 'k', 'e', 'y', 's', '=', 'O', 'F', 'F', ';', 0x0A, 'B', 'E', 'G', 'I', 'N', ' ', 'T', 'R', 'A', 'N', 'S', 'A', 'C', 'T', 'I', 'O', 'N', ';', 0x0A}); err != nil {
 		return fmt.Errorf("failed to write dump header: %w", err)
 	}
 
@@ -132,8 +132,8 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 		}
 	}
 
-	// Write our own transaction footer once
-	if _, err := out.Write([]byte("COMMIT;\n")); err != nil {
+	// Write our own transaction footer once with explicit LF-only line endings
+	if _, err := out.Write([]byte{'C', 'O', 'M', 'M', 'I', 'T', ';', 0x0A}); err != nil {
 		return fmt.Errorf("failed to write dump footer: %w", err)
 	}
 
