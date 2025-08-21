@@ -1,3 +1,4 @@
+// WriteWithTimeout writes a single line to the output writer with timeout protection
 // Package sqlite provides SQLite database operations with enhanced binary detection.
 //
 // This package automatically detects SQLite binaries from multiple sources:
@@ -14,143 +15,30 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 )
 
 // Engine shells out to a sqlite3 binary.
 type Engine struct {
-	Bin        string
-	cachedPath string // Cache the binary path to avoid repeated expensive lookups
-}
-
-// WriteWithTimeoutAndChunking writes data to the output writer in chunks with timeout protection
-// to detect broken pipes early and prevent hanging indefinitely.
-func (e *Engine) WriteWithTimeoutAndChunking(out io.Writer, data []byte, operation string) error {
-	slog.Debug("About to write output", "operation", operation, "size_bytes", len(data))
-
-	// Test if the output pipe is still open with a minimal write
-	slog.Debug("Testing output pipe connectivity", "operation", operation)
-	testWrite := []byte{}
-	if _, testErr := out.Write(testWrite); testErr != nil {
-		slog.Error("Output pipe is already closed/broken before main write", "operation", operation, "error", testErr)
-		return testErr
-	}
-	slog.Debug("Output pipe test successful, proceeding with chunked write", "operation", operation)
-
-	// Write in chunks to detect broken pipe earlier and provide better error reporting
-	chunkSize := 64 * 1024 // 64KB chunks
-	totalWritten := 0
-	totalChunks := (len(data) + chunkSize - 1) / chunkSize
-
-	slog.Debug("Starting chunked write", "operation", operation, "total_chunks", totalChunks, "chunk_size", chunkSize)
-
-	for totalWritten < len(data) {
-		endPos := totalWritten + chunkSize
-		if endPos > len(data) {
-			endPos = len(data)
-		}
-
-		chunkNum := (totalWritten / chunkSize) + 1
-		chunk := data[totalWritten:endPos]
-		slog.Debug("Writing chunk", "operation", operation, "chunk_number", chunkNum, "chunk_size", len(chunk), "offset", totalWritten)
-
-		// Write with timeout to prevent hanging
-		type writeResult struct {
-			bytesWritten int
-			err          error
-		}
-
-		writeChan := make(chan writeResult, 1)
-		go func() {
-			n, err := out.Write(chunk)
-			writeChan <- writeResult{bytesWritten: n, err: err}
-		}()
-
-		// Wait for write to complete or timeout (1 seconds)
-		select {
-		case result := <-writeChan:
-			bytesWritten := result.bytesWritten
-			err := result.err
-			totalWritten += bytesWritten
-
-			if err != nil {
-				slog.Error("Failed to write output chunk",
-					"operation", operation,
-					"error", err,
-					"bytes_written_this_chunk", bytesWritten,
-					"total_bytes_written", totalWritten,
-					"total_size", len(data),
-					"chunk_number", chunkNum)
-				return err
-			}
-
-			slog.Debug("Successfully wrote chunk", "operation", operation, "chunk_number", chunkNum, "bytes_written", bytesWritten)
-
-		case <-time.After(1 * time.Second):
-			slog.Error("Write operation timed out",
-				"operation", operation,
-				"chunk_number", chunkNum,
-				"chunk_size", len(chunk),
-				"total_bytes_written", totalWritten,
-				"timeout_seconds", 5)
-			return fmt.Errorf("write operation timed out after 1 seconds on chunk %d for %s operation", chunkNum, operation)
-		}
-
-		// Log progress for large writes
-		if len(data) > 1024*1024 && totalWritten%(256*1024) == 0 {
-			percent := float64(totalWritten) / float64(len(data)) * 100
-			slog.Debug("Write progress", "operation", operation, "bytes_written", totalWritten, "total_size", len(data), "percent", percent)
-		}
-	}
-
-	slog.Debug("Successfully wrote output", "operation", operation, "bytes_written", totalWritten, "total_size", len(data))
-	return nil
-}
-
-// getCachedPath returns the cached binary path or performs lookup if not cached
-func (e *Engine) getCachedPath() (string, error) {
-	if e.cachedPath != "" {
-		return e.cachedPath, nil
-	}
-
-	// Perform the expensive lookup only once
-	path, err := e.GetPathWithPackageManager()
-	if err != nil {
-		return "", err
-	}
-
-	// Cache the result
-	e.cachedPath = path
-	return path, nil
+	Bin string
 }
 
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
-	// Use cached path lookup to avoid expensive repeated lookups
-	binaryPath, err := e.getCachedPath()
-	if err != nil {
-		return fmt.Errorf("SQLite binary not found: %w", err)
-	}
+
+	binaryPath, _ := e.GetBinPath()
 
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = sql
 	return cmd.Run()
 }
 
-// DumpSelectiveTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
-func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.Writer) error {
-	slog.Debug("DumpSelectiveTables method called")
+// DumpTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
+func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) error {
 
-	// Use cached path lookup
-	binaryPath, err := e.getCachedPath()
-	if err != nil {
-		return fmt.Errorf("SQLite binary not found: %w", err)
-	}
+	binaryPath, _ := e.GetBinPath()
 
 	// Simply run .dump and capture all output
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
@@ -176,8 +64,6 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 	// Split on both CRLF and LF using regexp for platform independence
 	lineSplitter := regexp.MustCompile("\r?\n")
 	lines := lineSplitter.Split(fullDump, -1)
-	var filteredLines []string
-
 	for _, line := range lines {
 		// Skip CREATE TABLE sqlite_sequence line
 		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
@@ -188,169 +74,44 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 			continue
 		}
 
-		filteredLines = append(filteredLines, line)
+		// writing every line is not most efficient but safer with closing pipes and hangs that migh occur
+		if err := e.WriteWithTimeout(out, []byte(line+"\n"), "clean"); err != nil {
+			return err
+		}
 	}
 
-	// Write the filtered output using our generic chunked write function
-	filteredDump := strings.Join(filteredLines, "\n")
-
-	if err := e.WriteWithTimeoutAndChunking(out, []byte(filteredDump), "clean"); err != nil {
-		return err
-	}
-
-	slog.Debug("DumpSelectiveTables completed successfully")
+	slog.Debug("DumpTables completed successfully")
 	return nil
 }
 
 // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
-	_, err := e.GetPathWithPackageManager()
+	_, err := e.GetBinPath()
 	return err
 }
 
-// GetVersion returns the version of the SQLite binary, using enhanced path lookup
-func (e *Engine) GetVersion() (string, error) {
-	// Use the enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithPackageManager()
+// CheckAvailability performs a comprehensive check of SQLite availability and returns detailed information
+func (e *Engine) CheckAvailability() (path string, version string, err error) {
+	path, err = e.GetBinPath()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	cmd := exec.Command(binaryPath, "-version")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
+	cmd := exec.Command(path, "-version")
+	output, vErr := cmd.Output()
+	if vErr != nil {
+		return path, "", fmt.Errorf("failed to get SQLite version: %w", vErr)
 	}
-	return strings.TrimSpace(string(output)), nil
+	version = strings.TrimSpace(string(output))
+	return path, version, nil
 }
 
-// GetPath returns the full path to the SQLite binary
-func (e *Engine) GetPath() (string, error) {
-	return exec.LookPath(e.Bin)
-}
-
-// getLinuxAptSQLitePaths returns common apt SQLite installation paths on Linux
-func getLinuxAptSQLitePaths() []string {
-	if runtime.GOOS != "linux" {
-		return nil
+// GetBinPath returns the full path to the SQLite binary, checking package manager locations
+func (e *Engine) GetBinPath() (string, error) {
+	// Return cached path if available
+	if e.Bin != "" {
+		return e.Bin, nil
 	}
-
-	// Common locations where apt installs sqlite3
-	return []string{
-		"/usr/bin/sqlite3",
-		"/usr/local/bin/sqlite3",
-		"/bin/sqlite3",
-		"/usr/sbin/sqlite3",
-	}
-}
-
-// getWinGetSQLitePaths returns common WinGet SQLite installation paths on Windows
-func getWinGetSQLitePaths() []string {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
-
-	paths := []string{}
-
-	// Common SQLite package directory patterns
-	sqlitePatterns := []string{
-		"SQLite.SQLite_Microsoft.Winget.Source_*",
-		"SQLite.SQLite_*",
-	}
-
-	// 1. User-level installation (non-elevated)
-	userProfile := os.Getenv("USERPROFILE")
-	if userProfile != "" {
-		userWinGetPath := filepath.Join(userProfile, "AppData", "Local", "Microsoft", "WinGet", "Packages")
-
-		for _, pattern := range sqlitePatterns {
-			fullPattern := filepath.Join(userWinGetPath, pattern)
-			matches, err := filepath.Glob(fullPattern)
-			if err == nil {
-				for _, match := range matches {
-					paths = append(paths, filepath.Join(match, "sqlite3.exe"))
-				}
-			}
-		}
-	}
-
-	// 2. System-level installation (elevated/admin)
-	programFiles := os.Getenv("ProgramFiles")
-	if programFiles != "" {
-		systemWinGetPath := filepath.Join(programFiles, "WinGet", "Packages")
-
-		for _, pattern := range sqlitePatterns {
-			fullPattern := filepath.Join(systemWinGetPath, pattern)
-			matches, err := filepath.Glob(fullPattern)
-			if err == nil {
-				for _, match := range matches {
-					paths = append(paths, filepath.Join(match, "sqlite3.exe"))
-				}
-			}
-		}
-	}
-
-	// 3. Alternative system location (some versions use this)
-	programData := os.Getenv("ProgramData")
-	if programData != "" {
-		altSystemWinGetPath := filepath.Join(programData, "Microsoft", "WinGet", "Packages")
-
-		for _, pattern := range sqlitePatterns {
-			fullPattern := filepath.Join(altSystemWinGetPath, pattern)
-			matches, err := filepath.Glob(fullPattern)
-			if err == nil {
-				for _, match := range matches {
-					paths = append(paths, filepath.Join(match, "sqlite3.exe"))
-				}
-			}
-		}
-	}
-
-	return paths
-}
-
-// findSQLiteInApt searches for SQLite in apt installation directories
-func (e *Engine) findSQLiteInApt() (string, error) {
-	if runtime.GOOS != "linux" {
-		return "", fmt.Errorf("apt search only available on Linux")
-	}
-
-	paths := getLinuxAptSQLitePaths()
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			// Test if the executable works
-			cmd := exec.Command(path, "-version")
-			if err := cmd.Run(); err == nil {
-				return path, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("SQLite not found in standard apt installation directories")
-}
-
-// findSQLiteInWinGet searches for SQLite in WinGet installation directories
-func (e *Engine) findSQLiteInWinGet() (string, error) {
-	if runtime.GOOS != "windows" {
-		return "", fmt.Errorf("WinGet search only available on Windows")
-	}
-
-	paths := getWinGetSQLitePaths()
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			// Test if the executable works
-			cmd := exec.Command(path, "-version")
-			if err := cmd.Run(); err == nil {
-				return path, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("SQLite not found in WinGet installation directories")
-}
-
-// GetPathWithPackageManager returns the full path to the SQLite binary, checking package manager locations
-func (e *Engine) GetPathWithPackageManager() (string, error) {
 	// First try the standard PATH lookup
 	path, err := exec.LookPath(e.Bin)
 	if err == nil {
@@ -382,19 +143,4 @@ func (e *Engine) GetPathWithPackageManager() (string, error) {
 
 	// For non-sqlite3 binary names, return original error
 	return "", err
-}
-
-// CheckAvailability performs a comprehensive check of SQLite availability and returns detailed information
-func (e *Engine) CheckAvailability() (path string, version string, err error) {
-	path, err = e.GetPathWithPackageManager()
-	if err != nil {
-		return "", "", err
-	}
-
-	version, err = e.GetVersion()
-	if err != nil {
-		return path, "", fmt.Errorf("failed to get SQLite version: %w", err)
-	}
-
-	return path, version, nil
 }

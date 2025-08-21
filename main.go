@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/danielsiegl/gitsqlite/internal/filters"
 	"github.com/danielsiegl/gitsqlite/internal/logging"
@@ -31,24 +30,10 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  %s -log-dir ./logs clean < database.db > database.sql\n", exe)
 }
 
-// checkStdinAvailable returns true if there's piped data on stdin.
-func checkStdinAvailable() bool {
-	if fi, err := os.Stdin.Stat(); err == nil {
-		if (fi.Mode() & os.ModeCharDevice) != 0 {
-			return false
-		}
-		if fi.Size() == 0 {
-			return false
-		}
-	}
-	return true
-}
-
 func main() {
 	// Flags (kept compatible with original main.go)
 	var (
 		showVersion = flag.Bool("version", false, "Show version information")
-		checkSqlite = flag.Bool("sqlite-version", false, "Check if SQLite is available and show its version")
 		enableLog   = flag.Bool("log", false, "Enable logging to file in current directory")
 		logDir      = flag.String("log-dir", "", "Log to specified directory instead of current directory")
 		sqliteCmd   = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
@@ -97,10 +82,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
 			os.Exit(1)
 		}
-		return
-	}
-
-	if *checkSqlite {
 		logger.Info("checking sqlite availability", "sqlite_cmd", *sqliteCmd)
 		fmt.Printf("Checking SQLite availability...\n")
 
@@ -150,6 +131,7 @@ func main() {
 	}
 
 	switch op {
+
 	case "smudge":
 		logger.Info("starting smudge")
 		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout); err != nil {
@@ -159,30 +141,18 @@ func main() {
 			os.Exit(3)
 		}
 		logger.Info("smudge completed")
+
 	case "clean":
 		logger.Info("starting clean")
 		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
 			logger.Error("clean failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
 
-			// Determine exit code based on error type
-			errorMsg := err.Error()
-			switch {
-			case strings.Contains(errorMsg, "broken pipe") || strings.Contains(errorMsg, "pipe is being closed"):
-				logger.Info("Exiting due to broken pipe", "exitCode", 8)
-				os.Exit(8) // Broken pipe error
-			case strings.Contains(errorMsg, "timed out"):
-				fmt.Fprintf(os.Stderr, "Error: SQLite operation timed out - check database size and system resources: %v\n", err)
-				os.Exit(4) // Timeout error
-			case strings.Contains(errorMsg, "malformed") || strings.Contains(errorMsg, "corrupted") || strings.Contains(errorMsg, "not a database"):
-				fmt.Fprintf(os.Stderr, "Error: Database corruption detected - verify database integrity: %v\n", err)
-				os.Exit(5) // Database corruption error
-			default:
-				fmt.Fprintf(os.Stderr, "Error running SQLite command for clean operation: %v\n", err)
-				os.Exit(3) // Generic error
-			}
+			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
+			os.Exit(3)
 		}
 		logger.Info("clean completed")
+
 	}
 
 	logger.Info("gitsqlite finished successfully", "operation", op)
