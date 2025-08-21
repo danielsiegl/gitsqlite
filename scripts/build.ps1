@@ -47,7 +47,7 @@ function Build-GoApplication {
         $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         
         # Build ldflags with version information
-        $ldflagsString = "-X main.GitCommit=$gitCommit -X main.GitBranch=$gitBranch -X main.BuildTime=$buildTime -X main.Version=$version"
+        $ldflagsString = "-X github.com/danielsiegl/gitsqlite/internal/version.GitCommit=$gitCommit -X github.com/danielsiegl/gitsqlite/internal/version.GitBranch=$gitBranch -X github.com/danielsiegl/gitsqlite/internal/version.BuildTime=$buildTime -X github.com/danielsiegl/gitsqlite/internal/version.Version=$version"
         
         
         Write-Output "Executing: go build -ldflags `"$ldflagsString`" -o `"$outputFile`""
