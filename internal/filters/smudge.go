@@ -42,7 +42,15 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 	}
 	defer f.Close()
 
-	_, err = io.Copy(out, f)
+	// Read the entire database into memory for chunked writing
+	dbData, err := io.ReadAll(f)
+	if err != nil {
+		slog.Error("Failed to read restored database", "error", err)
+		return err
+	}
+
+	// Use chunked writing with timeout protection for smudge output
+	err = eng.WriteWithTimeoutAndChunking(out, dbData, "smudge")
 	copyDuration := time.Since(copyStart)
 	totalDuration := time.Since(startTime)
 
