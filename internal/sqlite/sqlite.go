@@ -11,6 +11,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,8 +21,51 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
+
+// WriteAllContext writes all bytes to w, respecting context cancellation and broken pipe handling
+func WriteAllContext(ctx context.Context, w io.Writer, b []byte) error {
+	type writeDeadliner interface{ SetWriteDeadline(time.Time) error }
+	var closer io.Closer
+	if c, ok := w.(io.Closer); ok {
+		closer = c
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		// loop to handle partial writes
+		off := 0
+		for off < len(b) {
+			if wd, ok := w.(writeDeadliner); ok {
+				_ = wd.SetWriteDeadline(time.Now().Add(30 * time.Second))
+			}
+			n, err := w.Write(b[off:])
+			if n > 0 {
+				off += n
+			}
+			if err != nil {
+				if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) {
+					err = nil // treat broken pipe as clean stop
+				}
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		if closer != nil {
+			_ = closer.Close() // unblock the write
+		}
+		return ctx.Err()
+	}
+}
 
 // Engine shells out to a sqlite3 binary.
 type Engine struct {
@@ -191,10 +235,10 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 		filteredLines = append(filteredLines, line)
 	}
 
-	// Write the filtered output using our generic chunked write function
+	// Write the filtered output using WriteAllContext for robust std.out handling
 	filteredDump := strings.Join(filteredLines, "\n")
 
-	if err := e.WriteWithTimeoutAndChunking(out, []byte(filteredDump), "clean"); err != nil {
+	if err := WriteAllContext(ctx, out, []byte(filteredDump)); err != nil {
 		return err
 	}
 
