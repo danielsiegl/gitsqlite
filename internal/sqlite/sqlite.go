@@ -17,14 +17,100 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Engine shells out to a sqlite3 binary.
 type Engine struct {
 	Bin        string
 	cachedPath string // Cache the binary path to avoid repeated expensive lookups
+}
+
+// WriteWithTimeoutAndChunking writes data to the output writer in chunks with timeout protection
+// to detect broken pipes early and prevent hanging indefinitely.
+func (e *Engine) WriteWithTimeoutAndChunking(out io.Writer, data []byte, operation string) error {
+	slog.Debug("About to write output", "operation", operation, "size_bytes", len(data))
+
+	// Test if the output pipe is still open with a minimal write
+	slog.Debug("Testing output pipe connectivity", "operation", operation)
+	testWrite := []byte{}
+	if _, testErr := out.Write(testWrite); testErr != nil {
+		slog.Error("Output pipe is already closed/broken before main write", "operation", operation, "error", testErr)
+		return testErr
+	}
+	slog.Debug("Output pipe test successful, proceeding with chunked write", "operation", operation)
+
+	// Write in chunks to detect broken pipe earlier and provide better error reporting
+	chunkSize := 64 * 1024 // 64KB chunks
+	totalWritten := 0
+	totalChunks := (len(data) + chunkSize - 1) / chunkSize
+
+	slog.Debug("Starting chunked write", "operation", operation, "total_chunks", totalChunks, "chunk_size", chunkSize)
+
+	for totalWritten < len(data) {
+		endPos := totalWritten + chunkSize
+		if endPos > len(data) {
+			endPos = len(data)
+		}
+
+		chunkNum := (totalWritten / chunkSize) + 1
+		chunk := data[totalWritten:endPos]
+		slog.Debug("Writing chunk", "operation", operation, "chunk_number", chunkNum, "chunk_size", len(chunk), "offset", totalWritten)
+
+		// Write with timeout to prevent hanging
+		type writeResult struct {
+			bytesWritten int
+			err          error
+		}
+
+		writeChan := make(chan writeResult, 1)
+		go func() {
+			n, err := out.Write(chunk)
+			writeChan <- writeResult{bytesWritten: n, err: err}
+		}()
+
+		// Wait for write to complete or timeout (1 seconds)
+		select {
+		case result := <-writeChan:
+			bytesWritten := result.bytesWritten
+			err := result.err
+			totalWritten += bytesWritten
+
+			if err != nil {
+				slog.Error("Failed to write output chunk",
+					"operation", operation,
+					"error", err,
+					"bytes_written_this_chunk", bytesWritten,
+					"total_bytes_written", totalWritten,
+					"total_size", len(data),
+					"chunk_number", chunkNum)
+				return err
+			}
+
+			slog.Debug("Successfully wrote chunk", "operation", operation, "chunk_number", chunkNum, "bytes_written", bytesWritten)
+
+		case <-time.After(1 * time.Second):
+			slog.Error("Write operation timed out",
+				"operation", operation,
+				"chunk_number", chunkNum,
+				"chunk_size", len(chunk),
+				"total_bytes_written", totalWritten,
+				"timeout_seconds", 5)
+			return fmt.Errorf("write operation timed out after 1 seconds on chunk %d for %s operation", chunkNum, operation)
+		}
+
+		// Log progress for large writes
+		if len(data) > 1024*1024 && totalWritten%(256*1024) == 0 {
+			percent := float64(totalWritten) / float64(len(data)) * 100
+			slog.Debug("Write progress", "operation", operation, "bytes_written", totalWritten, "total_size", len(data), "percent", percent)
+		}
+	}
+
+	slog.Debug("Successfully wrote output", "operation", operation, "bytes_written", totalWritten, "total_size", len(data))
+	return nil
 }
 
 // getCachedPath returns the cached binary path or performs lookup if not cached
@@ -87,9 +173,9 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 	// Get the full dump output and filter out sqlite_sequence table
 	fullDump := stdout.String()
 
-	// Convert CRLF to LF for platform independence
-	cleanDump := strings.ReplaceAll(fullDump, "\r\n", "\n") // Filter out sqlite_sequence table lines
-	lines := strings.Split(cleanDump, "\n")
+	// Split on both CRLF and LF using regexp for platform independence
+	lineSplitter := regexp.MustCompile("\r?\n")
+	lines := lineSplitter.Split(fullDump, -1)
 	var filteredLines []string
 
 	for _, line := range lines {
@@ -105,12 +191,15 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 		filteredLines = append(filteredLines, line)
 	}
 
-	// Write the filtered output
+	// Write the filtered output using our generic chunked write function
 	filteredDump := strings.Join(filteredLines, "\n")
-	_, err = out.Write([]byte(filteredDump))
+
+	if err := e.WriteWithTimeoutAndChunking(out, []byte(filteredDump), "clean"); err != nil {
+		return err
+	}
 
 	slog.Debug("DumpSelectiveTables completed successfully")
-	return err
+	return nil
 }
 
 // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
