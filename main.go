@@ -131,6 +131,7 @@ func main() {
 	}
 
 	switch op {
+
 	case "smudge":
 		logger.Info("starting smudge")
 		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout); err != nil {
@@ -140,6 +141,7 @@ func main() {
 			os.Exit(3)
 		}
 		logger.Info("smudge completed")
+
 	case "clean":
 		logger.Info("starting clean")
 		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
@@ -150,6 +152,7 @@ func main() {
 			os.Exit(3)
 		}
 		logger.Info("clean completed")
+
 	}
 
 	logger.Info("gitsqlite finished successfully", "operation", op)

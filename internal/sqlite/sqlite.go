@@ -23,25 +23,22 @@ import (
 
 // Engine shells out to a sqlite3 binary.
 type Engine struct {
-	Bin        string
-	cachedPath string // Cache the binary path to avoid repeated expensive lookups
+	Bin string
 }
 
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
-	// Use cached path lookup to avoid expensive repeated lookups
-	binaryPath, _ := e.GetPathWithPackageManager()
+
+	binaryPath, _ := e.GetBinPath()
 
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = sql
 	return cmd.Run()
 }
 
-// DumpSelectiveTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
-func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.Writer) error {
-	slog.Debug("DumpSelectiveTables method called")
+// DumpTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
+func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) error {
 
-	// Use cached path lookup
-	binaryPath, _ := e.GetPathWithPackageManager()
+	binaryPath, _ := e.GetBinPath()
 
 	// Simply run .dump and capture all output
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
@@ -77,39 +74,43 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 			continue
 		}
 
+		// writing every line is not most efficient but safer with closing pipes and hangs that migh occur
 		if err := e.WriteWithTimeout(out, []byte(line+"\n"), "clean"); err != nil {
 			return err
 		}
 	}
 
-	slog.Debug("DumpSelectiveTables completed successfully")
+	slog.Debug("DumpTables completed successfully")
 	return nil
 }
 
 // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
-	_, err := e.GetPathWithPackageManager()
+	_, err := e.GetBinPath()
 	return err
 }
 
-// GetVersion returns the version of the SQLite binary, using enhanced path lookup
-func (e *Engine) GetVersion() (string, error) {
-	// Use the enhanced path lookup to find the binary
-	binaryPath, _ := e.GetPathWithPackageManager()
-
-	cmd := exec.Command(binaryPath, "-version")
-	output, err := cmd.Output()
+// CheckAvailability performs a comprehensive check of SQLite availability and returns detailed information
+func (e *Engine) CheckAvailability() (path string, version string, err error) {
+	path, err = e.GetBinPath()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return strings.TrimSpace(string(output)), nil
+
+	cmd := exec.Command(path, "-version")
+	output, vErr := cmd.Output()
+	if vErr != nil {
+		return path, "", fmt.Errorf("failed to get SQLite version: %w", vErr)
+	}
+	version = strings.TrimSpace(string(output))
+	return path, version, nil
 }
 
-// GetPathWithPackageManager returns the full path to the SQLite binary, checking package manager locations
-func (e *Engine) GetPathWithPackageManager() (string, error) {
+// GetBinPath returns the full path to the SQLite binary, checking package manager locations
+func (e *Engine) GetBinPath() (string, error) {
 	// Return cached path if available
-	if e.cachedPath != "" {
-		return e.cachedPath, nil
+	if e.Bin != "" {
+		return e.Bin, nil
 	}
 	// First try the standard PATH lookup
 	path, err := exec.LookPath(e.Bin)
@@ -142,19 +143,4 @@ func (e *Engine) GetPathWithPackageManager() (string, error) {
 
 	// For non-sqlite3 binary names, return original error
 	return "", err
-}
-
-// CheckAvailability performs a comprehensive check of SQLite availability and returns detailed information
-func (e *Engine) CheckAvailability() (path string, version string, err error) {
-	path, err = e.GetPathWithPackageManager()
-	if err != nil {
-		return "", "", err
-	}
-
-	version, err = e.GetVersion()
-	if err != nil {
-		return path, "", fmt.Errorf("failed to get SQLite version: %w", err)
-	}
-
-	return path, version, nil
 }
