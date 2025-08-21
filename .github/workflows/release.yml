@@ -45,7 +45,7 @@ jobs:
               ### Available Binaries
               - **Windows**: `gitsqlite-windows-amd64.exe`, `gitsqlite-windows-arm64.exe`
               - **Linux**: `gitsqlite-linux-amd64`, `gitsqlite-linux-arm64`
-              - **macOS**: `gitsqlite-macos-amd64`, `gitsqlite-macos-arm64`
+              - **macOS**: `gitsqlite-macos-arm64`
               
               📖 **Full documentation**: [README.md](https://github.com/danielsiegl/gitsqlite/blob/main/README.md)       
           env:
