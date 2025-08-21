@@ -1,3 +1,4 @@
+// WriteWithTimeout writes a single line to the output writer with timeout protection
 // Package sqlite provides SQLite database operations with enhanced binary detection.
 //
 // This package automatically detects SQLite binaries from multiple sources:
@@ -20,7 +21,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 )
 
 // Engine shells out to a sqlite3 binary.
@@ -29,113 +29,9 @@ type Engine struct {
 	cachedPath string // Cache the binary path to avoid repeated expensive lookups
 }
 
-// WriteWithTimeoutAndChunking writes data to the output writer in chunks with timeout protection
-// to detect broken pipes early and prevent hanging indefinitely.
-func (e *Engine) WriteWithTimeoutAndChunking(out io.Writer, data []byte, operation string) error {
-	slog.Debug("About to write output", "operation", operation, "size_bytes", len(data))
-
-	// Test if the output pipe is still open with a minimal write
-	slog.Debug("Testing output pipe connectivity", "operation", operation)
-	testWrite := []byte{}
-	if _, testErr := out.Write(testWrite); testErr != nil {
-		slog.Error("Output pipe is already closed/broken before main write", "operation", operation, "error", testErr)
-		return testErr
-	}
-	slog.Debug("Output pipe test successful, proceeding with chunked write", "operation", operation)
-
-	// Write in chunks to detect broken pipe earlier and provide better error reporting
-	chunkSize := 64 * 1024 // 64KB chunks
-	totalWritten := 0
-	totalChunks := (len(data) + chunkSize - 1) / chunkSize
-
-	slog.Debug("Starting chunked write", "operation", operation, "total_chunks", totalChunks, "chunk_size", chunkSize)
-
-	for totalWritten < len(data) {
-		endPos := totalWritten + chunkSize
-		if endPos > len(data) {
-			endPos = len(data)
-		}
-
-		chunkNum := (totalWritten / chunkSize) + 1
-		chunk := data[totalWritten:endPos]
-		slog.Debug("Writing chunk", "operation", operation, "chunk_number", chunkNum, "chunk_size", len(chunk), "offset", totalWritten)
-
-		// Write with timeout to prevent hanging
-		type writeResult struct {
-			bytesWritten int
-			err          error
-		}
-
-		writeChan := make(chan writeResult, 1)
-		go func() {
-			n, err := out.Write(chunk)
-			writeChan <- writeResult{bytesWritten: n, err: err}
-		}()
-
-		// Wait for write to complete or timeout (1 seconds)
-		select {
-		case result := <-writeChan:
-			bytesWritten := result.bytesWritten
-			err := result.err
-			totalWritten += bytesWritten
-
-			if err != nil {
-				slog.Error("Failed to write output chunk",
-					"operation", operation,
-					"error", err,
-					"bytes_written_this_chunk", bytesWritten,
-					"total_bytes_written", totalWritten,
-					"total_size", len(data),
-					"chunk_number", chunkNum)
-				return err
-			}
-
-			slog.Debug("Successfully wrote chunk", "operation", operation, "chunk_number", chunkNum, "bytes_written", bytesWritten)
-
-		case <-time.After(1 * time.Second):
-			slog.Error("Write operation timed out",
-				"operation", operation,
-				"chunk_number", chunkNum,
-				"chunk_size", len(chunk),
-				"total_bytes_written", totalWritten,
-				"timeout_seconds", 5)
-			return fmt.Errorf("write operation timed out after 1 seconds on chunk %d for %s operation", chunkNum, operation)
-		}
-
-		// Log progress for large writes
-		if len(data) > 1024*1024 && totalWritten%(256*1024) == 0 {
-			percent := float64(totalWritten) / float64(len(data)) * 100
-			slog.Debug("Write progress", "operation", operation, "bytes_written", totalWritten, "total_size", len(data), "percent", percent)
-		}
-	}
-
-	slog.Debug("Successfully wrote output", "operation", operation, "bytes_written", totalWritten, "total_size", len(data))
-	return nil
-}
-
-// getCachedPath returns the cached binary path or performs lookup if not cached
-func (e *Engine) getCachedPath() (string, error) {
-	if e.cachedPath != "" {
-		return e.cachedPath, nil
-	}
-
-	// Perform the expensive lookup only once
-	path, err := e.GetPathWithPackageManager()
-	if err != nil {
-		return "", err
-	}
-
-	// Cache the result
-	e.cachedPath = path
-	return path, nil
-}
-
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
 	// Use cached path lookup to avoid expensive repeated lookups
-	binaryPath, err := e.getCachedPath()
-	if err != nil {
-		return fmt.Errorf("SQLite binary not found: %w", err)
-	}
+	binaryPath, _ := e.GetPathWithPackageManager()
 
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath)
 	cmd.Stdin = sql
@@ -147,10 +43,7 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 	slog.Debug("DumpSelectiveTables method called")
 
 	// Use cached path lookup
-	binaryPath, err := e.getCachedPath()
-	if err != nil {
-		return fmt.Errorf("SQLite binary not found: %w", err)
-	}
+	binaryPath, _ := e.GetPathWithPackageManager()
 
 	// Simply run .dump and capture all output
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
@@ -176,8 +69,6 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 	// Split on both CRLF and LF using regexp for platform independence
 	lineSplitter := regexp.MustCompile("\r?\n")
 	lines := lineSplitter.Split(fullDump, -1)
-	var filteredLines []string
-
 	for _, line := range lines {
 		// Skip CREATE TABLE sqlite_sequence line
 		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
@@ -188,14 +79,9 @@ func (e *Engine) DumpSelectiveTables(ctx context.Context, dbPath string, out io.
 			continue
 		}
 
-		filteredLines = append(filteredLines, line)
-	}
-
-	// Write the filtered output using our generic chunked write function
-	filteredDump := strings.Join(filteredLines, "\n")
-
-	if err := e.WriteWithTimeoutAndChunking(out, []byte(filteredDump), "clean"); err != nil {
-		return err
+		if err := e.WriteWithTimeout(out, []byte(line+"\n"), "clean"); err != nil {
+			return err
+		}
 	}
 
 	slog.Debug("DumpSelectiveTables completed successfully")
@@ -211,10 +97,7 @@ func (e *Engine) ValidateBinary() error {
 // GetVersion returns the version of the SQLite binary, using enhanced path lookup
 func (e *Engine) GetVersion() (string, error) {
 	// Use the enhanced path lookup to find the binary
-	binaryPath, err := e.GetPathWithPackageManager()
-	if err != nil {
-		return "", err
-	}
+	binaryPath, _ := e.GetPathWithPackageManager()
 
 	cmd := exec.Command(binaryPath, "-version")
 	output, err := cmd.Output()
@@ -351,6 +234,10 @@ func (e *Engine) findSQLiteInWinGet() (string, error) {
 
 // GetPathWithPackageManager returns the full path to the SQLite binary, checking package manager locations
 func (e *Engine) GetPathWithPackageManager() (string, error) {
+	// Return cached path if available
+	if e.cachedPath != "" {
+		return e.cachedPath, nil
+	}
 	// First try the standard PATH lookup
 	path, err := exec.LookPath(e.Bin)
 	if err == nil {
