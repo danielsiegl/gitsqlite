@@ -72,7 +72,7 @@ func (e *Engine) WriteWithTimeoutAndChunking(out io.Writer, data []byte, operati
 			writeChan <- writeResult{bytesWritten: n, err: err}
 		}()
 
-		// Wait for write to complete or timeout (5 seconds)
+		// Wait for write to complete or timeout (1 seconds)
 		select {
 		case result := <-writeChan:
 			bytesWritten := result.bytesWritten
@@ -92,14 +92,14 @@ func (e *Engine) WriteWithTimeoutAndChunking(out io.Writer, data []byte, operati
 
 			slog.Debug("Successfully wrote chunk", "operation", operation, "chunk_number", chunkNum, "bytes_written", bytesWritten)
 
-		case <-time.After(5 * time.Second):
+		case <-time.After(1 * time.Second):
 			slog.Error("Write operation timed out",
 				"operation", operation,
 				"chunk_number", chunkNum,
 				"chunk_size", len(chunk),
 				"total_bytes_written", totalWritten,
 				"timeout_seconds", 5)
-			return fmt.Errorf("write operation timed out after 5 seconds on chunk %d for %s operation", chunkNum, operation)
+			return fmt.Errorf("write operation timed out after 1 seconds on chunk %d for %s operation", chunkNum, operation)
 		}
 
 		// Log progress for large writes
