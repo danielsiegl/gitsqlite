@@ -73,7 +73,14 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-ubuntu-amd64
+        path: '*.sql'
+        retention-days: 5
 
   test-ubuntu-arm64:
     needs: build
@@ -117,7 +124,14 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-ubuntu-arm64
+        path: '*.sql'
+        retention-days: 5
 
   test-macos-arm64:
     needs: build
@@ -161,7 +175,14 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-macos-arm64
+        path: '*.sql'
+        retention-days: 5
 
   test-windows-amd64:
     needs: build
@@ -238,5 +259,12 @@ jobs:
 
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-windows-amd64
+        path: '*.sql'
+        retention-days: 5
     
