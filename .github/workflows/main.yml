@@ -184,6 +184,7 @@ jobs:
         path: '*.sql'
         retention-days: 5
 
+
   test-windows-amd64:
     needs: build
     runs-on: windows-latest
@@ -235,5 +236,40 @@ jobs:
       with:
         name: sql-artifacts-windows-amd64
         path: '*.sql'
+        retention-days: 5
+
+  cross-evaluate:
+    needs: [test-ubuntu-amd64, test-windows-amd64]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download Ubuntu SQL artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: sql-artifacts-ubuntu-amd64
+        path: ubuntu_sql
+
+    - name: Download Windows SQL artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: sql-artifacts-windows-amd64
+        path: windows_sql
+
+    - name: Run cross-platform evaluation
+      shell: pwsh
+      run: |
+        $ubuntuFile = (Get-ChildItem ubuntu_sql/*.sql | Select-Object -First 1).FullName
+        $windowsFile = (Get-ChildItem windows_sql/*.sql | Select-Object -First 1).FullName
+        Write-Host "Comparing $ubuntuFile (Ubuntu) with $windowsFile (Windows)"
+        ./scripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
+
+    - name: Upload compared SQL files
+      uses: actions/upload-artifact@v4
+      with:
+        name: cross-evaluated-sql-files
+        path: |
+          ubuntu_sql/*.sql
+          windows_sql/*.sql
         retention-days: 5
     
