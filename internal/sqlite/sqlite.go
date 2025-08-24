@@ -33,8 +33,6 @@ var (
 	// Match decimal floats in INSERT lines (simple & fast).
 	// We limit normalization to INSERT lines to avoid touching DDL, comments, etc.
 	floatRe = regexp.MustCompile(`-?\d+\.\d+`)
-	// Optional: match 'YYYY-MM-DD HH:MM:SS' and pin it to a constant for deterministic tests.
-	tsRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`)
 	// Choose your fixed precision for dumps (2 for money, 6/9/etc. otherwise).
 	floatDigits = 9
 )
@@ -55,9 +53,6 @@ func normalizeLine(line string) string {
 		// 'f' => decimal, fixed number of digits after the decimal point.
 		return strconv.FormatFloat(f, 'f', floatDigits, 64)
 	})
-
-	// OPTIONAL: make timestamps deterministic (comment out if you don't need this)
-	// line = tsRe.ReplaceAllString(line, "2025-08-22 00:00:00")
 
 	return line
 }
