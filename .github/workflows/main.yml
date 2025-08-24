@@ -7,6 +7,34 @@ on:
   push:
   
 jobs:
+  create-smoketest-db:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    - name: Install SQLite3 if needed
+      run: |
+        if ! command -v sqlite3 &> /dev/null; then
+          echo "SQLite3 not found, installing..."
+          sudo apt-get update && sudo apt-get install -y sqlite3
+        else
+          echo "SQLite3 is already available: $(which sqlite3)"
+          sqlite3 --version
+        fi
+    - name: Create smoketest database
+      shell: pwsh
+      run: ./scripts/createtestdatabase.ps1
+    - name: Upload smoketest database
+      uses: actions/upload-artifact@v4
+      with:
+        name: smoketest-db
+        path: smoketest.db
+        retention-days: 5
   build:
     defaults:
       run:
@@ -32,7 +60,7 @@ jobs:
         retention-days: 5
 
   test-ubuntu-amd64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -56,9 +84,11 @@ jobs:
           sqlite3 --version
         fi
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest
       run: |
@@ -83,7 +113,7 @@ jobs:
         retention-days: 5
 
   test-ubuntu-arm64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: ubuntu-24.04-arm
     steps:
     - uses: actions/checkout@v4
@@ -107,9 +137,11 @@ jobs:
           sqlite3 --version
         fi
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest on ARM64
       run: |
@@ -134,7 +166,7 @@ jobs:
         retention-days: 5
 
   test-macos-arm64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
@@ -158,9 +190,11 @@ jobs:
           sqlite3 --version
         fi
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest on macOS
       run: |
@@ -186,7 +220,7 @@ jobs:
 
 
   test-windows-amd64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
@@ -211,9 +245,11 @@ jobs:
           & sqlite3.exe --version
         }
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest on Windows
       shell: cmd
@@ -261,6 +297,7 @@ jobs:
       run: |
         $ubuntuFile = (Get-ChildItem ubuntu_sql/*.sql | Select-Object -First 1).FullName
         $windowsFile = (Get-ChildItem windows_sql/*.sql | Select-Object -First 1).FullName
+        
         Write-Host "Comparing $ubuntuFile (Ubuntu) with $windowsFile (Windows)"
         ./scripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
 
