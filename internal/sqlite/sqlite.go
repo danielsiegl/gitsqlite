@@ -104,6 +104,11 @@ func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) e
 			continue
 		}
 
+		//skip DELETE FROM sqlite_sequence;
+		if strings.Contains(line, "DELETE FROM sqlite_sequence") || strings.Contains(line, "DELETE FROM \"sqlite_sequence\"") {
+			continue
+		}
+
 		// **Normalize here**
 		// make sure floating point is rendered the same on linux and windows
 		line = normalizeLine(line)
