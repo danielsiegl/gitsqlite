@@ -17,6 +17,34 @@ param(
 )
 
 Write-Host "Step 4: Comparing SQL outputs"
+# Function to check for UTF-8 BOM
+function Test-UTF8BOM {
+    param([string]$Path)
+    $bom = [byte[]](0xEF,0xBB,0xBF)
+    if (-not (Test-Path $Path)) { return $null }
+    $fs = [System.IO.File]::OpenRead($Path)
+    $bytes = New-Object byte[] 3
+    $read = $fs.Read($bytes, 0, 3)
+    $fs.Close()
+    if ($read -eq 3 -and $bytes[0] -eq $bom[0] -and $bytes[1] -eq $bom[1] -and $bytes[2] -eq $bom[2]) {
+        return $true
+    } else {
+        return $false
+    }
+}
+
+Write-Host "Checking file encoding..."
+foreach ($f in @($File1, $File2)) {
+    if (Test-Path $f) {
+        if (Test-UTF8BOM $f) {
+            Write-Host "${f}: UTF-8 BOM detected" -ForegroundColor Yellow
+        } else {
+            Write-Host "${f}: Plain UTF-8 (no BOM)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "${f}: File not found" -ForegroundColor Red
+    }
+}
 
 # Initialize test failure tracking
 $testsFailed = @()
@@ -113,6 +141,16 @@ if ((Test-Path $File1) -and (Test-Path $File2)) {
     } else {
         Write-Host "✅ CRLF check: Both files use LF-only line endings"
     }
+
+    # Output LF and CRLF counts for both files
+    $file1Text = Get-Content $File1 -Raw
+    $file2Text = Get-Content $File2 -Raw
+    $file1CRLFCount = ([regex]::Matches($file1Text, "\r\n")).Count
+    $file2CRLFCount = ([regex]::Matches($file2Text, "\r\n")).Count
+    $file1LFCount = ([regex]::Matches($file1Text, "(?<!\r)\n")).Count
+    $file2LFCount = ([regex]::Matches($file2Text, "(?<!\r)\n")).Count
+    Write-Host "  ${File1}: LF count = $file1LFCount, CRLF count = $file1CRLFCount"
+    Write-Host "  ${File2}: LF count = $file2LFCount, CRLF count = $file2CRLFCount"
 } else {
     Write-Host "⏭️ Skipping CRLF check - one or both files missing"
 }

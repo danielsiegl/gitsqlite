@@ -7,6 +7,34 @@ on:
   push:
   
 jobs:
+  create-smoketest-db:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    - name: Install SQLite3 if needed
+      run: |
+        if ! command -v sqlite3 &> /dev/null; then
+          echo "SQLite3 not found, installing..."
+          sudo apt-get update && sudo apt-get install -y sqlite3
+        else
+          echo "SQLite3 is already available: $(which sqlite3)"
+          sqlite3 --version
+        fi
+    - name: Create smoketest database
+      shell: pwsh
+      run: ./scripts/createtestdatabase.ps1
+    - name: Upload smoketest database
+      uses: actions/upload-artifact@v4
+      with:
+        name: smoketest-db
+        path: smoketest.db
+        retention-days: 5
   build:
     defaults:
       run:
@@ -32,7 +60,7 @@ jobs:
         retention-days: 5
 
   test-ubuntu-amd64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -56,9 +84,11 @@ jobs:
           sqlite3 --version
         fi
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest
       run: |
@@ -73,10 +103,17 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-ubuntu-amd64
+        path: '*.sql'
+        retention-days: 5
 
   test-ubuntu-arm64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: ubuntu-24.04-arm
     steps:
     - uses: actions/checkout@v4
@@ -100,9 +137,11 @@ jobs:
           sqlite3 --version
         fi
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest on ARM64
       run: |
@@ -117,10 +156,17 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-ubuntu-arm64
+        path: '*.sql'
+        retention-days: 5
 
   test-macos-arm64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
@@ -144,9 +190,11 @@ jobs:
           sqlite3 --version
         fi
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest on macOS
       run: |
@@ -161,10 +209,18 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-macos-arm64
+        path: '*.sql'
+        retention-days: 5
+
 
   test-windows-amd64:
-    needs: build
+    needs: [build, create-smoketest-db]
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
@@ -189,54 +245,68 @@ jobs:
           & sqlite3.exe --version
         }
     
-    - name: Create test database
-      shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
     
     - name: Run integrated smoketest on Windows
-      shell: pwsh
+      shell: cmd
       run: |
-        Write-Host "Step 1: Database -> SQL (clean)"
-        $cleanOutput1 = Get-Content smoketest.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean
-        [System.IO.File]::WriteAllText("smoketest_output1.sql", $cleanOutput1, [System.Text.UTF8Encoding]::new($false))
-        
-        Write-Host "Step 2: SQL -> Database (smudge)"
-        $sqlContent = [System.IO.File]::ReadAllText("smoketest_output1.sql", [System.Text.UTF8Encoding]::new($false))
-        
-        # Create a process to handle binary output properly
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "./bin/gitsqlite-windows-amd64.exe"
-        $psi.Arguments = "smudge"
-        $psi.UseShellExecute = $false
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.RedirectStandardError = $true
-        
-        $proc = [System.Diagnostics.Process]::Start($psi)
-        $proc.StandardInput.Write($sqlContent)
-        $proc.StandardInput.Close()
-        
-        # Read binary output
-        $outputStream = $proc.StandardOutput.BaseStream
-        $buffer = New-Object byte[] 4096
-        $ms = New-Object System.IO.MemoryStream
-        while (($read = $outputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
-            $ms.Write($buffer, 0, $read)
-        }
-        $proc.WaitForExit()
-        
-        if ($proc.ExitCode -ne 0) {
-            throw "Step 2 failed with exit code $($proc.ExitCode)"
-        }
-        
-        [System.IO.File]::WriteAllBytes("smoketest_output2.db", $ms.ToArray())
-        $ms.Close()
-        
-        Write-Host "Step 3: Database -> SQL (clean again)"
-        $cleanOutput2 = Get-Content smoketest_output2.db -AsByteStream | ./bin/gitsqlite-windows-amd64.exe clean
-        [System.IO.File]::WriteAllText("smoketest_output2.sql", $cleanOutput2, [System.Text.UTF8Encoding]::new($false))
+        REM Step 1: Database -> SQL (clean)
+        bin\gitsqlite-windows-amd64.exe clean < smoketest.db > smoketest_output1.sql
+
+        REM Step 2: SQL -> Database (smudge)
+        bin\gitsqlite-windows-amd64.exe smudge < smoketest_output1.sql > smoketest_output2.db
+
+        REM Step 3: Database -> SQL (clean again)
+        bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db > smoketest_output2.sql
 
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1 -Cleanup
+      run: ./scripts/evaluatetest.ps1
+
+    - name: Upload SQL Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sql-artifacts-windows-amd64
+        path: '*.sql'
+        retention-days: 5
+
+  cross-evaluate:
+    needs: [test-ubuntu-amd64, test-windows-amd64]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download Ubuntu SQL artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: sql-artifacts-ubuntu-amd64
+        path: ubuntu_sql
+
+    - name: Download Windows SQL artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: sql-artifacts-windows-amd64
+        path: windows_sql
+
+    - name: Run cross-platform evaluation
+      shell: pwsh
+      run: |
+        $ubuntuFile = (Get-ChildItem ubuntu_sql/*.sql | Select-Object -First 1).FullName
+        $windowsFile = (Get-ChildItem windows_sql/*.sql | Select-Object -First 1).FullName
+        
+        Write-Host "Comparing $ubuntuFile (Ubuntu) with $windowsFile (Windows)"
+        ./scripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
+
+    - name: Upload compared SQL files
+      uses: actions/upload-artifact@v4
+      with:
+        name: cross-evaluated-sql-files
+        path: |
+          ubuntu_sql/*.sql
+          windows_sql/*.sql
+        retention-days: 5
     
