@@ -17,13 +17,49 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
 // Engine shells out to a sqlite3 binary.
 type Engine struct {
 	Bin string
+}
+
+// at top of file
+var (
+	// Match decimal floats in INSERT lines (simple & fast).
+	// We limit normalization to INSERT lines to avoid touching DDL, comments, etc.
+	floatRe = regexp.MustCompile(`-?\d+\.\d+`)
+	// Optional: match 'YYYY-MM-DD HH:MM:SS' and pin it to a constant for deterministic tests.
+	tsRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`)
+	// Choose your fixed precision for dumps (2 for money, 6/9/etc. otherwise).
+	floatDigits = 9
+)
+
+func normalizeLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	// Only normalize INSERT lines (where values live)
+	if !strings.HasPrefix(trimmed, "INSERT INTO") {
+		return line
+	}
+
+	// Normalize floats to fixed precision using Go's consistent formatter.
+	line = floatRe.ReplaceAllStringFunc(line, func(m string) string {
+		f, err := strconv.ParseFloat(m, 64)
+		if err != nil {
+			return m // leave as-is if somehow unparsable
+		}
+		// 'f' => decimal, fixed number of digits after the decimal point.
+		return strconv.FormatFloat(f, 'f', floatDigits, 64)
+	})
+
+	// OPTIONAL: make timestamps deterministic (comment out if you don't need this)
+	// line = tsRe.ReplaceAllString(line, "2025-08-22 00:00:00")
+
+	return line
 }
 
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
@@ -72,6 +108,11 @@ func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) e
 		if strings.Contains(line, "INSERT INTO sqlite_sequence") || strings.Contains(line, "INSERT INTO \"sqlite_sequence\"") {
 			continue
 		}
+
+		// **Normalize here**
+		// make sure floating point is rendered the same on linux and windows
+		line = normalizeLine(line)
+
 		// we probably could have kept LF - but it is easier to read like that
 		if err := e.WriteWithTimeout(out, []byte(line+"\n"), "clean"); err != nil {
 			return err
