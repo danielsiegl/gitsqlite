@@ -2,7 +2,4 @@ gitsqlite
 /gitsqlite.exe
 /bin/
 /testoutput/
-/test_roundtrip_20250811_133651/
-*.log
 *.sql
-*.db
