@@ -109,11 +109,11 @@ func main() {
 		os.Exit(1)
 	}
 	op := flag.Arg(0)
-	if op != "clean" && op != "smudge" {
+	if op != "clean" && op != "smudge" && op != "diff" {
 		logger.Error("unknown operation", "operation", op)
 		cleanup() // Ensure log is flushed before exit
 		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", op)
-		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge\n")
+		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge, diff\n")
 		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
 		os.Exit(1)
 	}
@@ -147,12 +147,20 @@ func main() {
 		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
 			logger.Error("clean failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
-
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
 			os.Exit(3)
 		}
 		logger.Info("clean completed")
 
+	case "diff":
+		logger.Info("starting diff")
+		if err := filters.Diff(ctx, engine, os.Stdin, os.Stdout); err != nil {
+			logger.Error("diff failed", slog.Any("error", err))
+			cleanup() // Ensure log is flushed before exit
+			fmt.Fprintf(os.Stderr, "Error running SQLite command for diff operation: %v\n", err)
+			os.Exit(3)
+		}
+		logger.Info("diff completed")
 	}
 
 	logger.Info("gitsqlite finished successfully", "operation", op)

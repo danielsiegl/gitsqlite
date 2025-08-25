@@ -37,7 +37,7 @@ var (
 	floatDigits = 9
 )
 
-func normalizeLine(line string) string {
+func NormalizeLine(line string) string {
 	trimmed := strings.TrimSpace(line)
 	// Only normalize INSERT lines (where values live)
 	if !strings.HasPrefix(trimmed, "INSERT INTO") {
@@ -111,7 +111,7 @@ func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) e
 
 		// **Normalize here**
 		// make sure floating point is rendered the same on linux and windows
-		line = normalizeLine(line)
+		line = NormalizeLine(line)
 
 		// we probably could have kept LF - but it is easier to read like that
 		if err := e.WriteWithTimeout(out, []byte(line+"\n"), "clean"); err != nil {
