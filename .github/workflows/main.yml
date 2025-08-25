@@ -7,29 +7,6 @@ on:
   push:
   
 jobs:
-  create-smoketest-db:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install SQLite3 if needed
-      run: |
-        if ! command -v sqlite3 &> /dev/null; then
-          echo "SQLite3 not found, installing..."
-          sudo apt-get update && sudo apt-get install -y sqlite3
-        else
-          echo "SQLite3 is already available: $(which sqlite3)"
-          sqlite3 --version
-        fi
-    - name: Create smoketest database
-      shell: pwsh
-      run: ./buildscripts/createtestdatabase.ps1
-    - name: Upload smoketest database
-      uses: actions/upload-artifact@v4
-      with:
-        name: smoketest-db
-        path: smoketest.db
-        retention-days: 5
   build:
     defaults:
       run:
@@ -54,30 +31,63 @@ jobs:
         path: bin/**/*
         retention-days: 5
 
+  create-smoketest-db:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Create smoketest database
+      shell: pwsh
+      run: ./buildscripts/createtestdatabase.ps1
+    - name: Upload smoketest database
+      uses: actions/upload-artifact@v4
+      with:
+        name: smoketest-db
+        path: smoketest.db
+        retention-days: 5
+
+  test-diff-filter:
+    needs: [build, create-smoketest-db]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
+    - name: Make diff filter binary executable
+      run: chmod +x bin/gitsqlite-linux-amd64
+    - name: Run diff filter against smoketest.db
+      run: ./bin/gitsqlite-linux-amd64 diff < smoketest.db > smoketest_diff.sql
+    - name: Output line and statement counts
+      run: |
+        echo "Total lines: $(wc -l < smoketest_diff.sql)"
+        echo "CREATE statements: $(grep -c -E '^CREATE ' smoketest_diff.sql)"
+        echo "INSERT statements: $(grep -c -E '^INSERT ' smoketest_diff.sql)"
+        if grep -q -E '^CREATE ' smoketest_diff.sql && grep -q -E '^INSERT ' smoketest_diff.sql; then
+          echo "Diff filter output contains CREATE and INSERT statements."
+        else
+          echo "Diff filter output missing CREATE or INSERT statements!"
+          exit 1
+        fi
   test-ubuntu-amd64:
     needs: [build, create-smoketest-db]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
         name: gitsqlite-binaries
         path: bin
-    
     - name: Make Linux binary executable
       run: chmod +x bin/gitsqlite-linux-amd64
-    
-    - name: Install SQLite3 if needed
-      run: |
-        if ! command -v sqlite3 &> /dev/null; then
-          echo "SQLite3 not found, installing..."
-          sudo apt-get update && sudo apt-get install -y sqlite3
-        else
-          echo "SQLite3 is already available: $(which sqlite3)"
-          sqlite3 --version
-        fi
     
     - name: Download smoketest database
       uses: actions/download-artifact@v4
@@ -121,17 +131,6 @@ jobs:
     
     - name: Make Linux ARM64 binary executable
       run: chmod +x bin/gitsqlite-linux-arm64
-    
-    - name: Install SQLite3 if needed
-      run: |
-        if ! command -v sqlite3 &> /dev/null; then
-          echo "SQLite3 not found, installing..."
-          sudo apt-get update && sudo apt-get install -y sqlite3
-        else
-          echo "SQLite3 is already available: $(which sqlite3)"
-          sqlite3 --version
-        fi
-    
     - name: Download smoketest database
       uses: actions/download-artifact@v4
       with:
@@ -148,49 +147,32 @@ jobs:
         
         echo "Step 3: Database -> SQL (clean again)"
         ./bin/gitsqlite-linux-arm64 clean < smoketest_output2.db > smoketest_output2.sql
-    
     - name: Evaluate test results
       shell: pwsh
       run: ./buildscripts/evaluatetest.ps1
-
     - name: Upload SQL Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: sql-artifacts-ubuntu-arm64
         path: '*.sql'
         retention-days: 5
-
   test-macos-arm64:
     needs: [build, create-smoketest-db]
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
-    
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
         name: gitsqlite-binaries
         path: bin
-    
     - name: Make macOS binary executable
       run: chmod +x bin/gitsqlite-macos-arm64
-    
-    - name: Install SQLite3 if needed
-      run: |
-        if ! command -v sqlite3 &> /dev/null; then
-          echo "SQLite3 not found, installing..."
-          brew install sqlite
-        else
-          echo "SQLite3 is already available: $(which sqlite3)"
-          sqlite3 --version
-        fi
-    
     - name: Download smoketest database
       uses: actions/download-artifact@v4
       with:
         name: smoketest-db
         path: .
-    
     - name: Run integrated smoketest on macOS
       run: |
         echo "Step 1: Database -> SQL (clean)"
@@ -201,11 +183,9 @@ jobs:
         
         echo "Step 3: Database -> SQL (clean again)"
         ./bin/gitsqlite-macos-arm64 clean < smoketest_output2.db > smoketest_output2.sql
-    
     - name: Evaluate test results
       shell: pwsh
       run: ./buildscripts/evaluatetest.ps1
-
     - name: Upload SQL Artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -219,33 +199,18 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-    
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
         name: gitsqlite-binaries
         path: bin
-    
-    - name: Check SQLite3 availability
-      shell: pwsh
-      run: |
-        Write-Host "Checking sqlite3.exe..."
-        $sqlite = Get-Command sqlite3.exe -ErrorAction SilentlyContinue
-        if (-not $sqlite) {
-          choco install sqlite -y
-          # path propagation can lag; invoke via absolute path to be safe
-          $exe = 'C:\ProgramData\chocolatey\bin\sqlite3.exe'
-          & $exe --version
-        } else {
-          & sqlite3.exe --version
-        }
-    
+    - name: Install SQLite
+      run: choco install sqlite -y
     - name: Download smoketest database
       uses: actions/download-artifact@v4
       with:
         name: smoketest-db
         path: .
-    
     - name: Run integrated smoketest on Windows
       shell: cmd
       run: |
@@ -257,36 +222,30 @@ jobs:
 
         REM Step 3: Database -> SQL (clean again)
         bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db > smoketest_output2.sql
-
     - name: Evaluate test results
       shell: pwsh
       run: ./buildscripts/evaluatetest.ps1
-
     - name: Upload SQL Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: sql-artifacts-windows-amd64
         path: '*.sql'
         retention-days: 5
-
   cross-evaluate:
     needs: [test-ubuntu-amd64, test-windows-amd64]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-
     - name: Download Ubuntu SQL artifact
       uses: actions/download-artifact@v4
       with:
         name: sql-artifacts-ubuntu-amd64
         path: ubuntu_sql
-
     - name: Download Windows SQL artifact
       uses: actions/download-artifact@v4
       with:
         name: sql-artifacts-windows-amd64
         path: windows_sql
-
     - name: Run cross-platform evaluation
       shell: pwsh
       run: |
@@ -295,7 +254,6 @@ jobs:
         
         Write-Host "Comparing $ubuntuFile (Ubuntu) with $windowsFile (Windows)"
         ./buildscripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
-
     - name: Upload compared SQL files
       uses: actions/upload-artifact@v4
       with:

@@ -5,12 +5,12 @@
 [![Release](https://img.shields.io/github/v/release/danielsiegl/gitsqlite)](https://github.com/danielsiegl/gitsqlite/releases)
 [![Downloads](https://img.shields.io/github/downloads/danielsiegl/gitsqlite/total.svg)](https://github.com/danielsiegl/gitsqlite/releases)
 
-A Git clean/smudge filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges.
+A Git clean/smudge/diff filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges.
 
 ## Why
 
 Binary SQLite databases are opaque to Git – you can’t easily see changes or resolve conflicts.  
-**gitsqlite** automatically converts between `.sqlite` and SQL text on checkout and commit, letting you version SQLite data just like source code.
+**gitsqlite** automatically converts between `.sqlite` and SQL text on checkout and commit or diff, letting you version SQLite data just like source code.
 
 ## Quick Start
 
@@ -37,9 +37,10 @@ Binary SQLite databases are opaque to Git – you can’t easily see changes or 
 
 3. **Configure Git filters**:
    ```bash
-   echo '*.db filter=gitsqlite diff=gitsqlite' >> .gitattributes
+   echo '*.db filter=gitsqlite' > .gitattributes
    git config filter.gitsqlite.clean "gitsqlite clean"
    git config filter.gitsqlite.smudge "gitsqlite smudge"
+   git config filter.gitsqlite.diff "gitsqlite diff"
    ```
 
 4. **Start versioning SQLite files**:
@@ -122,18 +123,20 @@ Git will automatically convert SQLite files to SQL text for storage and back to 
 
 ## Usage
 
-gitsqlite operates as a Git clean/smudge filter, automatically converting between binary SQLite databases and SQL text format.
+gitsqlite operates as a Git clean/smudge/diff filter, automatically converting between binary SQLite databases and SQL text format. It also provides a diff operation for streaming SQL dumps for comparison or inspection.
 
 **Basic syntax:**
 ```bash
 gitsqlite clean   # Convert SQLite binary → SQL text (for Git storage)
 gitsqlite smudge  # Convert SQL text → SQLite binary (for checkout)
+gitsqlite diff    # Stream SQL dump from SQLite binary (for diff/comparison)
 ```
 
 **Manual conversion:**
 ```bash
 gitsqlite clean < database.db > database.sql
 gitsqlite smudge < database.sql > database.db
+gitsqlite diff < database.db > database.sql   # No filtering, direct dump for diff/comparison
 ```
 
 See [CLI Parameters](#cli-parameters) for all available options.
@@ -141,8 +144,9 @@ See [CLI Parameters](#cli-parameters) for all available options.
 ## CLI Parameters
 
 ### Operations
-- **`clean`** - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout)
-- **`smudge`** - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)
+- **`clean`**   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout, filtering optimized for cross platform)
+- **`smudge`**  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)
+- **`diff`**    - Stream SQL dump from binary SQLite database (reads from stdin, writes to stdout; no filtering)
 
 ### Options
 - **`-sqlite <path>`** - Path to SQLite executable (default: "sqlite3")
@@ -179,9 +183,21 @@ See [CLI Parameters](#cli-parameters) for all available options.
 sqlite3 sample.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users (name, email) VALUES ('John Doe', 'john@example.com'), ('Jane Smith', 'jane@example.com');"
 ```
 
+
 2. **Convert to SQL text:**
 ```bash
 gitsqlite clean < sample.db > sample.sql
+```
+
+3. **Stream SQL for diff/comparison:**
+4. **Show differences between two databases using diff:**
+```bash
+gitsqlite diff < old.db > old.sql
+gitsqlite diff < new.db > new.sql
+diff -u old.sql new.sql
+```
+```bash
+gitsqlite diff < sample.db > sample.sql
 ```
 
 3. **View the SQL output:**

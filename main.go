@@ -19,7 +19,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "Usage: %s [options] <operation>\n\n", exe)
 	fmt.Fprintf(os.Stderr, "Operations:\n")
 	fmt.Fprintf(os.Stderr, "  clean   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout)\n")
-	fmt.Fprintf(os.Stderr, "  smudge  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)\n\n")
+	fmt.Fprintf(os.Stderr, "  smudge  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)\n")
+	fmt.Fprintf(os.Stderr, "  diff    - Stream SQL dump from binary SQLite database (reads from stdin, writes to stdout; no filtering)\n\n")
 	fmt.Fprintf(os.Stderr, "Options:\n")
 	flag.PrintDefaults()
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
@@ -109,11 +110,11 @@ func main() {
 		os.Exit(1)
 	}
 	op := flag.Arg(0)
-	if op != "clean" && op != "smudge" {
+	if op != "clean" && op != "smudge" && op != "diff" {
 		logger.Error("unknown operation", "operation", op)
 		cleanup() // Ensure log is flushed before exit
 		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", op)
-		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge\n")
+		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge, diff\n")
 		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
 		os.Exit(1)
 	}
@@ -147,12 +148,20 @@ func main() {
 		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
 			logger.Error("clean failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
-
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
 			os.Exit(3)
 		}
 		logger.Info("clean completed")
 
+	case "diff":
+		logger.Info("starting diff")
+		if err := filters.Diff(ctx, engine, os.Stdin, os.Stdout); err != nil {
+			logger.Error("diff failed", slog.Any("error", err))
+			cleanup() // Ensure log is flushed before exit
+			fmt.Fprintf(os.Stderr, "Error running SQLite command for diff operation: %v\n", err)
+			os.Exit(3)
+		}
+		logger.Info("diff completed")
 	}
 
 	logger.Info("gitsqlite finished successfully", "operation", op)
