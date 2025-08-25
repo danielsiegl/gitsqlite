@@ -12,11 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Download binaries
-      uses: actions/download-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin
     - name: Install SQLite3 if needed
       run: |
         if ! command -v sqlite3 &> /dev/null; then
@@ -28,7 +23,7 @@ jobs:
         fi
     - name: Create smoketest database
       shell: pwsh
-      run: ./scripts/createtestdatabase.ps1
+      run: ./buildscripts/createtestdatabase.ps1
     - name: Upload smoketest database
       uses: actions/upload-artifact@v4
       with:
@@ -50,7 +45,7 @@ jobs:
         cache: false
 
     - name: Build
-      run: ./scripts/build.ps1
+      run: ./buildscripts/build.ps1
     
     - name: Upload binary Artifacts
       uses: actions/upload-artifact@v4
@@ -103,7 +98,7 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1
+      run: ./buildscripts/evaluatetest.ps1
 
     - name: Upload SQL Artifacts
       uses: actions/upload-artifact@v4
@@ -156,7 +151,7 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1
+      run: ./buildscripts/evaluatetest.ps1
 
     - name: Upload SQL Artifacts
       uses: actions/upload-artifact@v4
@@ -209,7 +204,7 @@ jobs:
     
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1
+      run: ./buildscripts/evaluatetest.ps1
 
     - name: Upload SQL Artifacts
       uses: actions/upload-artifact@v4
@@ -265,7 +260,7 @@ jobs:
 
     - name: Evaluate test results
       shell: pwsh
-      run: ./scripts/evaluatetest.ps1
+      run: ./buildscripts/evaluatetest.ps1
 
     - name: Upload SQL Artifacts
       uses: actions/upload-artifact@v4
@@ -299,7 +294,7 @@ jobs:
         $windowsFile = (Get-ChildItem windows_sql/*.sql | Select-Object -First 1).FullName
         
         Write-Host "Comparing $ubuntuFile (Ubuntu) with $windowsFile (Windows)"
-        ./scripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
+        ./buildscripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
 
     - name: Upload compared SQL files
       uses: actions/upload-artifact@v4
