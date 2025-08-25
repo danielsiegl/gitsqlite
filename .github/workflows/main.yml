@@ -7,6 +7,38 @@ on:
   push:
   
 jobs:
+  test-diff-filter:
+    needs: [build, create-smoketest-db]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
+    - name: Make diff filter binary executable
+      run: chmod +x bin/gitsqlite-linux-amd64
+    - name: Run diff filter against smoketest.db
+      run: ./bin/gitsqlite-linux-amd64 diff < smoketest.db > smoketest_diff.sql
+    - name: Output line and statement counts
+      run: |
+        echo "Total lines: $(wc -l < smoketest_diff.sql)"
+        echo "CREATE statements: $(grep -c -E '^CREATE ' smoketest_diff.sql)"
+        echo "INSERT statements: $(grep -c -E '^INSERT ' smoketest_diff.sql)"
+    - name: Check for CREATE and INSERT statements
+      run: |
+        if grep -q -E '^CREATE ' smoketest_diff.sql && grep -q -E '^INSERT ' smoketest_diff.sql; then
+          echo "Diff filter output contains CREATE and INSERT statements."
+        else
+          echo "Diff filter output missing CREATE or INSERT statements!"
+          exit 1
+        fi
   create-smoketest-db:
     needs: build
     runs-on: ubuntu-latest
