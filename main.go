@@ -18,7 +18,7 @@ func usage() {
 	exe := filepath.Base(os.Args[0])
 	fmt.Fprintf(os.Stderr, "Usage: %s [options] <operation>\n\n", exe)
 	fmt.Fprintf(os.Stderr, "Operations:\n")
-	fmt.Fprintf(os.Stderr, "  clean   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout)\n")
+	fmt.Fprintf(os.Stderr, "  clean   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout; filtered to be byte-for-byte identical)\n")
 	fmt.Fprintf(os.Stderr, "  smudge  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)\n")
 	fmt.Fprintf(os.Stderr, "  diff    - Stream SQL dump from binary SQLite database (reads from stdin, writes to stdout; no filtering)\n\n")
 	fmt.Fprintf(os.Stderr, "Options:\n")

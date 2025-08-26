@@ -17,7 +17,8 @@ Binary SQLite databases are opaque to Git – you can’t easily see changes or 
 1. **Install gitsqlite** (see [Installation](#installation) for all options):
    ```bash
    # Windows
-   curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
+   # curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
+   winget install danielsiegl.gitsqlite
    ```
    ```bash
    # Linux/macOS  
@@ -76,7 +77,8 @@ Git will automatically convert SQLite files to SQL text for storage and back to 
 - **Windows (PowerShell)**:  
   ```bash
   # AMD64 (Intel/AMD 64-bit)
-  curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
+  winget install danielsiegl.gitsqlite
+  # curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
   # ARM64 (Windows on ARM)
   # curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-arm64.exe
   
@@ -100,8 +102,6 @@ Git will automatically convert SQLite files to SQL text for storage and back to 
 
 - **macOS**:  
   ```bash
-  # Intel Macs - using curl
-  curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-amd64
   # Apple Silicon (M1/M2/M3) - using curl
   # curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-macos-arm64
   
