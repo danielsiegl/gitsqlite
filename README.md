@@ -68,6 +68,7 @@ To enable SQL-based diffs for SQLite databases in Git, add the following to your
 ```
 
 This will use `gitsqlite diff` to convert SQLite databases to SQL for diffing in Git.
+Sample Repo: https://github.com/danielsiegl/gitsqliteDiffFilterDemo
 
 
 ## ⚠️ Important Notice: Database Merging
