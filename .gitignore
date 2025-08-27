@@ -3,3 +3,6 @@ gitsqlite
 /bin/
 /testoutput/
 *.sql
+/.obsidian/workspace.json
+/.obsidian/core-plugins.json
+/.obsidian/appearance.json
