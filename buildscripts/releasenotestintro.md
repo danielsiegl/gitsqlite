@@ -1,6 +1,6 @@
 ## 📦 gitsqlite Release
               
-A Git clean/smudge/diff filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges. There are several benefit over using sqlite3 .dump directly:
+A Git clean/smudge/diff filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges. There are several benefits over using sqlite3 .dump directly:
 - byte-by-byte equal across windows/linux/mac
 - Consistent float rounding (deterministic dumps).
 - Strip SQLite’s internal/system tables from dumps.

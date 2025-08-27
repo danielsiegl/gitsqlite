@@ -12,7 +12,7 @@ A Git clean/smudge/diff filter for storing SQLite databases in plain text SQL, e
 Binary SQLite databases are opaque to Git – you can’t easily see changes or resolve conflicts.  
 **gitsqlite** automatically converts between `.sqlite` and SQL text on checkout and commit or diff, letting you version SQLite data just like source code.
 
-There are several benefit over [using sqlite3 .dump directly](https://garrit.xyz/posts/2023-11-01-tracking-sqlite-database-changes-in-git):
+There are several benefits over [using sqlite3 .dump directly](https://garrit.xyz/posts/2023-11-01-tracking-sqlite-database-changes-in-git):
 - byte-by-byte equal across windows/linux/mac
 - Consistent float rounding (deterministic dumps).
 - Strip SQLite’s internal/system tables from dumps.
