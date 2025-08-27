@@ -36,6 +36,7 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
    ```
 
 2. **Ensure SQLite 3 is installed** (required dependency):
+   (Not required when installed via winget.)
    ```bash
    # Windows
    winget install SQLite.SQLite
@@ -46,13 +47,13 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
    ```
 
 3. **Configure Git filters**:
-  ```bash
-  echo '*.db filter=gitsqlite' >> .gitattributes
-  # echo '*.db diff=gitsqlite' >> .gitattributes
-  git config filter.gitsqlite.clean "gitsqlite clean"
-  git config filter.gitsqlite.smudge "gitsqlite smudge"
-  # git config diff.gitsqlite.textconv "gitsqlite diff"
-  ```
+    ```bash
+    echo '*.db filter=gitsqlite' >> .gitattributes
+    # echo '*.db diff=gitsqlite' >> .gitattributes
+    git config filter.gitsqlite.clean "gitsqlite clean"
+    git config filter.gitsqlite.smudge "gitsqlite smudge"
+    # git config diff.gitsqlite.textconv "gitsqlite diff"
+    ```
 
 4. **Start versioning SQLite files**:
    ```bash
