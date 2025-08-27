@@ -65,7 +65,7 @@ Git will automatically convert SQLite files to SQL text for storage and back to 
 
 ## Quick Start Git Diff
 
-To enable SQL-based diffs for SQLite databases in Git, add the following to your repository's `.gitattributes` and configure your Git diff driver:
+To enable SQL-based diffs for SQLite databases in Git, add the following to your repository's `.gitattributes` and configure your Git diff driver: (It doesn't matter if it is stored as binary or via smudge/clean.)
 
 **.gitattributes**
 ```
