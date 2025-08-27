@@ -13,23 +13,47 @@ jobs:
         shell: pwsh
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.24'
-        cache: false
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: false
 
-    - name: Build
-      run: ./buildscripts/build.ps1
-    
-    - name: Upload binary Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin/**/*
-        retention-days: 5
+      - name: Build
+        run: ./buildscripts/build.ps1
+
+      - name: Upload binary Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin/**/*
+          retention-days: 5
+
+      - name: Prepare Debian package structure
+        run: |
+          mkdir -p debian/usr/local/bin
+          cp bin/gitsqlite-linux-amd64 debian/usr/local/bin/gitsqlite
+          chmod 755 debian/usr/local/bin/gitsqlite
+          mkdir -p debian/DEBIAN
+          echo "Package: gitsqlite" > debian/DEBIAN/control
+          echo "Version: 1.0.0" >> debian/DEBIAN/control
+          echo "Section: utils" >> debian/DEBIAN/control
+          echo "Priority: optional" >> debian/DEBIAN/control
+          echo "Architecture: amd64" >> debian/DEBIAN/control
+          echo "Maintainer: Daniel Siegl" >> debian/DEBIAN/control
+          echo "Description: Git filter for SQLite databases" >> debian/DEBIAN/control
+
+      - name: Build Debian package
+        run: dpkg-deb --build debian gitsqlite_1.0.0_amd64.deb
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitsqlite-debian-package
+          path: gitsqlite_1.0.0_amd64.deb
+          retention-days: 5
 
   create-smoketest-db:
     needs: build
@@ -231,6 +255,41 @@ jobs:
         name: sql-artifacts-windows-amd64
         path: '*.sql'
         retention-days: 5
+  smoketest-deb:
+    needs: [build, create-smoketest-db]
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+        - name: Download Debian package
+          uses: actions/download-artifact@v4
+          with:
+            name: gitsqlite-debian-package
+            path: .
+        - name: Download smoketest database
+          uses: actions/download-artifact@v4
+          with:
+            name: smoketest-db
+            path: .
+        - name: Install .deb package
+          run: sudo dpkg -i gitsqlite_1.0.0_amd64.deb
+        - name: Run smoketest using installed gitsqlite
+          run: |
+            echo "Step 1: Database -> SQL (clean)"
+            gitsqlite clean < smoketest.db > smoketest_output1.sql
+            echo "Step 2: SQL -> Database (smudge)"
+            gitsqlite smudge < smoketest_output1.sql > smoketest_output2.db
+            echo "Step 3: Database -> SQL (clean again)"
+            gitsqlite clean < smoketest_output2.db > smoketest_output2.sql
+        - name: Evaluate test results
+          shell: pwsh
+          run: ./buildscripts/evaluatetest.ps1
+        - name: Upload SQL Artifacts
+          uses: actions/upload-artifact@v4
+          with:
+            name: sql-artifacts-deb-smoketest
+            path: '*.sql'
+            retention-days: 5
+
   cross-evaluate:
     needs: [test-ubuntu-amd64, test-windows-amd64]
     runs-on: ubuntu-latest
