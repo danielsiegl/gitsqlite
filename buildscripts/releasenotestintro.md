@@ -6,7 +6,8 @@ A Git clean/smudge/diff filter for storing SQLite databases in plain text SQL, e
 1. Download the appropriate binary for your platform and make sure it is reachable from Git Bash (Path)
     ```bash
     # Example for Windows
-    curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
+    winget install danielsiegl.gitsqlite
+    # curl -L -o gitsqlite.exe https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-windows-amd64.exe
     ```
 2. Install SQLite 3: `winget install SQLite.SQLite` (Windows) or `sudo apt install sqlite3` (Linux)
 3. Configure Git filters:
