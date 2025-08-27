@@ -64,7 +64,7 @@ jobs:
     - name: Make diff filter binary executable
       run: chmod +x bin/gitsqlite-linux-amd64
     - name: Run diff filter against smoketest.db
-      run: ./bin/gitsqlite-linux-amd64 diff < smoketest.db > smoketest_diff.sql
+      run: ./bin/gitsqlite-linux-amd64 diff smoketest.db > smoketest_diff.sql
     - name: Output line and statement counts
       run: |
         echo "Total lines: $(wc -l < smoketest_diff.sql)"

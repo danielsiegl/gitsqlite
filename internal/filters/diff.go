@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -15,7 +14,7 @@ import (
 
 // Diff streams a binary SQLite DB from 'in' directly into sqlite3 .dump and writes SQL to 'out'.
 // No temp file is created; input is piped to sqlite3 and output is streamed to stdout.
-func Diff(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer) error {
+func Diff(ctx context.Context, eng *sqlite.Engine, dbFile string, out io.Writer) error {
 	startTime := time.Now()
 	slog.Info("Starting diff operation")
 
@@ -25,24 +24,7 @@ func Diff(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer) 
 		return err
 	}
 
-	tmp, err := os.CreateTemp("", "gitsqlite-diff-*.db")
-	if err != nil {
-		slog.Error("Failed to create temp file", "error", err)
-		return err
-	}
-	defer os.Remove(tmp.Name())
-
-	if _, err := io.Copy(tmp, in); err != nil {
-		_ = tmp.Close()
-		slog.Error("Failed to copy input to temp file", "error", err)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		slog.Error("Failed to close temp file", "error", err)
-		return err
-	}
-
-	cmd := exec.CommandContext(ctx, binaryPath, tmp.Name(), ".dump")
+	cmd := exec.CommandContext(ctx, binaryPath, dbFile, ".dump")
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		slog.Error("Failed to get stdout pipe", "error", err)
