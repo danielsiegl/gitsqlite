@@ -31,6 +31,16 @@ jobs:
           path: bin/**/*
           retention-days: 5
 
+
+  debian-package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binary Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin
       - name: Prepare Debian package structure
         run: |
           mkdir -p debian/usr/local/bin
@@ -44,10 +54,8 @@ jobs:
           echo "Architecture: amd64" >> debian/DEBIAN/control
           echo "Maintainer: Daniel Siegl" >> debian/DEBIAN/control
           echo "Description: Git filter for SQLite databases" >> debian/DEBIAN/control
-
       - name: Build Debian package
         run: dpkg-deb --build debian gitsqlite_1.0.0_amd64.deb
-
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
@@ -256,7 +264,7 @@ jobs:
         path: '*.sql'
         retention-days: 5
   smoketest-deb:
-    needs: [build, create-smoketest-db]
+    needs: [debian-package, create-smoketest-db]
     runs-on: ubuntu-latest
     steps:
         - uses: actions/checkout@v4
