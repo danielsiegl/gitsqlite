@@ -38,9 +38,10 @@ jobs:
               3. Configure Git filters:
                   ```bash
                   echo '*.db filter=gitsqlite' >> .gitattributes
+                  # echo '*.db diff=gitsqlite' >> .gitattributes
                   git config filter.gitsqlite.clean "gitsqlite clean"
                   git config filter.gitsqlite.smudge "gitsqlite smudge"
-                  git config filter.gitsqlite.diff "gitsqlite diff"
+                  # git config diff.gitsqlite.textconv "gitsqlite diff"
                   ```
               
               ### Available Binaries

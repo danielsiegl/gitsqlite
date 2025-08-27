@@ -37,12 +37,13 @@ Binary SQLite databases are opaque to Git – you can’t easily see changes or 
    ```
 
 3. **Configure Git filters**:
-   ```bash
-   echo '*.db filter=gitsqlite' > .gitattributes
-   git config filter.gitsqlite.clean "gitsqlite clean"
-   git config filter.gitsqlite.smudge "gitsqlite smudge"
-   git config filter.gitsqlite.diff "gitsqlite diff"
-   ```
+  ```bash
+  echo '*.db filter=gitsqlite' >> .gitattributes
+  # echo '*.db diff=gitsqlite' >> .gitattributes
+  git config filter.gitsqlite.clean "gitsqlite clean"
+  git config filter.gitsqlite.smudge "gitsqlite smudge"
+  # git config diff.gitsqlite.textconv "gitsqlite diff"
+  ```
 
 4. **Start versioning SQLite files**:
    ```bash
