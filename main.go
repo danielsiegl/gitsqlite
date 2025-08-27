@@ -20,12 +20,13 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "Operations:\n")
 	fmt.Fprintf(os.Stderr, "  clean   - Convert binary SQLite database to SQL dump (reads from stdin, writes to stdout; filtered to be byte-for-byte identical)\n")
 	fmt.Fprintf(os.Stderr, "  smudge  - Convert SQL dump to binary SQLite database (reads from stdin, writes to stdout)\n")
-	fmt.Fprintf(os.Stderr, "  diff    - Stream SQL dump from binary SQLite database (reads from stdin, writes to stdout; no filtering)\n\n")
+	fmt.Fprintf(os.Stderr, "  diff    - Stream SQL dump from binary SQLite database (reads from file, writes to stdout; no filtering)\n\n")
 	fmt.Fprintf(os.Stderr, "Options:\n")
 	flag.PrintDefaults()
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
 	fmt.Fprintf(os.Stderr, "  %s clean < database.db > database.sql\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s smudge < database.sql > database.db\n", exe)
+	fmt.Fprintf(os.Stderr, "  %s diff database.db\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -sqlite /usr/local/bin/sqlite3 clean < database.db\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -log clean < database.db > database.sql\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -log-dir ./logs clean < database.db > database.sql\n", exe)
@@ -155,7 +156,12 @@ func main() {
 
 	case "diff":
 		logger.Info("starting diff")
-		if err := filters.Diff(ctx, engine, os.Stdin, os.Stdout); err != nil {
+		if flag.NArg() < 2 {
+			fmt.Fprintf(os.Stderr, "Usage: %s diff <database.db>\n", os.Args[0])
+			os.Exit(2)
+		}
+		dbFile := flag.Arg(1)
+		if err := filters.Diff(ctx, engine, dbFile, os.Stdout); err != nil {
 			logger.Error("diff failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for diff operation: %v\n", err)
