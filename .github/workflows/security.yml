@@ -1,0 +1,50 @@
+name: Security (Snyk)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  snyk-go:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # needed to upload SARIF
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      # SCA (Open Source deps) for Go modules
+      - name: Snyk Open Source scan (Go)
+        uses: snyk/actions/golang@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: >-
+            --sarif-file-output=snyk.sarif
+            --severity-threshold=medium
+        continue-on-error: true  # let upload run even if vulns found
+
+      - name: Upload Snyk SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk.sarif
+
+      # Optional: Snyk Code (SAST) using the setup + CLI
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+      - name: Snyk Code scan (SAST)
+        run: snyk code test --sarif-file-output=snyk-code.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+      - name: Upload Snyk Code SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-code.sarif
