@@ -5,6 +5,9 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/danielsiegl/gitsqlite)](go.mod)
 [![Release](https://img.shields.io/github/v/release/danielsiegl/gitsqlite)](https://github.com/danielsiegl/gitsqlite/releases)
 [![Downloads](https://img.shields.io/github/downloads/danielsiegl/gitsqlite/total.svg)](https://github.com/danielsiegl/gitsqlite/releases)
+![Repo Size](https://img.shields.io/github/repo-size/Sulstice/global-chem)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+
 
 A Git clean/smudge/diff filter for storing SQLite databases in plain text SQL, enabling meaningful diffs and merges.
 
