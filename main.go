@@ -32,6 +32,102 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  %s -log-dir ./logs clean < database.db > database.sql\n", exe)
 }
 
+// showVersionInfo displays detailed version information and checks SQLite availability
+func showVersionInfo(sqliteCmd string, logger *slog.Logger, cleanup func()) {
+	logger.Info("showing version information")
+	fmt.Printf("gitsqlite version %s\n", version.Version)
+	fmt.Printf("Git commit: %s\n", version.GitCommit)
+	fmt.Printf("Git branch: %s\n", version.GitBranch)
+	fmt.Printf("Build time: %s\n", version.BuildTime)
+	if execPath, err := os.Executable(); err == nil {
+		fmt.Printf("Executable location: %s\n", execPath)
+		logger.Info("version information displayed",
+			"version", version.Version, "commit", version.GitCommit, "branch", version.GitBranch,
+			"build_time", version.BuildTime, "executable_path", execPath)
+	} else {
+		logger.Error("failed to get executable path", "error", err)
+		cleanup() // Ensure log is flushed before exit
+		fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
+		os.Exit(1)
+	}
+	logger.Info("checking sqlite availability", "sqlite_cmd", sqliteCmd)
+	fmt.Printf("Checking SQLite availability...\n")
+
+	engine := &sqlite.Engine{Bin: sqliteCmd}
+	sqlitePath, version, err := engine.CheckAvailability()
+	if err != nil {
+		logger.Error("sqlite availability check failed", "sqlite_cmd", sqliteCmd, "error", err)
+		cleanup() // Ensure log is flushed before exit
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
+		os.Exit(2)
+	}
+	fmt.Printf("SQLite found at: %s\n", sqlitePath)
+	fmt.Printf("SQLite version: %s\n", version)
+	logger.Info("sqlite availability check completed", "version", version, "path", sqlitePath)
+}
+
+// validateOperation checks if the provided operation is valid
+func validateOperation(logger *slog.Logger, cleanup func()) string {
+	if flag.NArg() < 1 {
+		logger.Error("no operation specified")
+		cleanup() // Ensure log is flushed before exit
+		fmt.Fprintf(os.Stderr, "Error: No operation specified\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	op := flag.Arg(0)
+	if op != "clean" && op != "smudge" && op != "diff" {
+		logger.Error("unknown operation", "operation", op)
+		cleanup() // Ensure log is flushed before exit
+		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", op)
+		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge, diff\n")
+		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
+		os.Exit(1)
+	}
+	return op
+}
+
+// executeOperation runs the specified operation with the given engine
+func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, logger *slog.Logger, cleanup func()) {
+	switch op {
+	case "smudge":
+		logger.Info("starting smudge")
+		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout); err != nil {
+			logger.Error("smudge failed", slog.Any("error", err))
+			cleanup() // Ensure log is flushed before exit
+			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
+			os.Exit(3)
+		}
+		logger.Info("smudge completed")
+
+	case "clean":
+		logger.Info("starting clean")
+		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
+			logger.Error("clean failed", slog.Any("error", err))
+			cleanup() // Ensure log is flushed before exit
+			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
+			os.Exit(3)
+		}
+		logger.Info("clean completed")
+
+	case "diff":
+		logger.Info("starting diff")
+		if flag.NArg() < 2 {
+			fmt.Fprintf(os.Stderr, "Usage: %s diff <database.db>\n", os.Args[0])
+			os.Exit(2)
+		}
+		dbFile := flag.Arg(1)
+		if err := filters.Diff(ctx, engine, dbFile, os.Stdout); err != nil {
+			logger.Error("diff failed", slog.Any("error", err))
+			cleanup() // Ensure log is flushed before exit
+			fmt.Fprintf(os.Stderr, "Error running SQLite command for diff operation: %v\n", err)
+			os.Exit(3)
+		}
+		logger.Info("diff completed")
+	}
+}
+
 func main() {
 	// Flags (kept compatible with original main.go)
 	var (
@@ -68,57 +164,12 @@ func main() {
 	}
 
 	if *showVersion {
-		logger.Info("showing version information")
-		fmt.Printf("gitsqlite version %s\n", version.Version)
-		fmt.Printf("Git commit: %s\n", version.GitCommit)
-		fmt.Printf("Git branch: %s\n", version.GitBranch)
-		fmt.Printf("Build time: %s\n", version.BuildTime)
-		if execPath, err := os.Executable(); err == nil {
-			fmt.Printf("Executable location: %s\n", execPath)
-			logger.Info("version information displayed",
-				"version", version.Version, "commit", version.GitCommit, "branch", version.GitBranch,
-				"build_time", version.BuildTime, "executable_path", execPath)
-		} else {
-			logger.Error("failed to get executable path", "error", err)
-			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
-			os.Exit(1)
-		}
-		logger.Info("checking sqlite availability", "sqlite_cmd", *sqliteCmd)
-		fmt.Printf("Checking SQLite availability...\n")
-
-		engine := &sqlite.Engine{Bin: *sqliteCmd}
-		sqlitePath, version, err := engine.CheckAvailability()
-		if err != nil {
-			logger.Error("sqlite availability check failed", "sqlite_cmd", *sqliteCmd, "error", err)
-			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
-			os.Exit(2)
-		}
-		fmt.Printf("SQLite found at: %s\n", sqlitePath)
-		fmt.Printf("SQLite version: %s\n", version)
-		logger.Info("sqlite availability check completed", "version", version, "path", sqlitePath)
+		showVersionInfo(*sqliteCmd, logger, cleanup)
 		return
 	}
 
-	// Operation required
-	if flag.NArg() < 1 {
-		logger.Error("no operation specified")
-		cleanup() // Ensure log is flushed before exit
-		fmt.Fprintf(os.Stderr, "Error: No operation specified\n\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-	op := flag.Arg(0)
-	if op != "clean" && op != "smudge" && op != "diff" {
-		logger.Error("unknown operation", "operation", op)
-		cleanup() // Ensure log is flushed before exit
-		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", op)
-		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge, diff\n")
-		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
-		os.Exit(1)
-	}
+	// Operation required and validation
+	op := validateOperation(logger, cleanup)
 	ctx := context.Background()
 	engine := &sqlite.Engine{Bin: *sqliteCmd}
 
@@ -132,43 +183,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	switch op {
-
-	case "smudge":
-		logger.Info("starting smudge")
-		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout); err != nil {
-			logger.Error("smudge failed", slog.Any("error", err))
-			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
-			os.Exit(3)
-		}
-		logger.Info("smudge completed")
-
-	case "clean":
-		logger.Info("starting clean")
-		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
-			logger.Error("clean failed", slog.Any("error", err))
-			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
-			os.Exit(3)
-		}
-		logger.Info("clean completed")
-
-	case "diff":
-		logger.Info("starting diff")
-		if flag.NArg() < 2 {
-			fmt.Fprintf(os.Stderr, "Usage: %s diff <database.db>\n", os.Args[0])
-			os.Exit(2)
-		}
-		dbFile := flag.Arg(1)
-		if err := filters.Diff(ctx, engine, dbFile, os.Stdout); err != nil {
-			logger.Error("diff failed", slog.Any("error", err))
-			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "Error running SQLite command for diff operation: %v\n", err)
-			os.Exit(3)
-		}
-		logger.Info("diff completed")
-	}
+	executeOperation(ctx, op, engine, logger, cleanup)
 
 	logger.Info("gitsqlite finished successfully", "operation", op)
 }
