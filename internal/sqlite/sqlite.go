@@ -67,6 +67,23 @@ func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) erro
 }
 
 // DumpTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
+// shouldSkipLine determines if a line should be skipped during dump filtering
+func shouldSkipLine(line string) bool {
+	// Skip CREATE TABLE sqlite_sequence line
+	if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
+		return true
+	}
+	// Skip INSERT INTO sqlite_sequence lines
+	if strings.Contains(line, "INSERT INTO sqlite_sequence") || strings.Contains(line, "INSERT INTO \"sqlite_sequence\"") {
+		return true
+	}
+	// Skip DELETE FROM sqlite_sequence;
+	if strings.Contains(line, "DELETE FROM sqlite_sequence") || strings.Contains(line, "DELETE FROM \"sqlite_sequence\"") {
+		return true
+	}
+	return false
+}
+
 func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) error {
 
 	binaryPath, _ := e.GetBinPath()
@@ -95,17 +112,8 @@ func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) e
 		// this way it should work with CRLF and LF
 		line = strings.TrimRight(line, "\n")
 		line = strings.TrimRight(line, "\r")
-		// Skip CREATE TABLE sqlite_sequence line
-		if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
-			continue
-		}
-		// Skip INSERT INTO sqlite_sequence lines
-		if strings.Contains(line, "INSERT INTO sqlite_sequence") || strings.Contains(line, "INSERT INTO \"sqlite_sequence\"") {
-			continue
-		}
-
-		//skip DELETE FROM sqlite_sequence;
-		if strings.Contains(line, "DELETE FROM sqlite_sequence") || strings.Contains(line, "DELETE FROM \"sqlite_sequence\"") {
+		
+		if shouldSkipLine(line) {
 			continue
 		}
 
