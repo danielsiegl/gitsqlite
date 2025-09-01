@@ -1,6 +1,7 @@
 # gitsqlite
 [![CI](https://github.com/danielsiegl/gitsqlite/actions/workflows/main.yml/badge.svg)](https://github.com/danielsiegl/gitsqlite/actions/workflows/main.yml)
 [![Security (Snyk)](https://github.com/danielsiegl/gitsqlite/actions/workflows/security.yml/badge.svg)](https://github.com/danielsiegl/gitsqlite/actions/workflows/security.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/danielsiegl/gitsqlite)](https://goreportcard.com/report/github.com/danielsiegl/gitsqlite)
 
 [![License: BSD-2](https://img.shields.io/badge/license-BSD--2-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/danielsiegl/gitsqlite)](go.mod)
