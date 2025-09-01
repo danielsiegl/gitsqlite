@@ -1,8 +1,11 @@
 gitsqlite
-/gitsqlite.exe
-/bin/
-/testoutput/
+./gitsqlite.exe
+./bin/
+./testoutput/
 *.sql
+*.db
+*.log
+test-logs/
 /.obsidian/workspace.json
 /.obsidian/core-plugins.json
 /.obsidian/appearance.json
