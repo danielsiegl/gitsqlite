@@ -167,7 +167,9 @@ ls logs/gitsqlite_*.log
 ├── scripts/                             # Testing scripts
 │   ├── smoketest.sh                     # Linux smoke test
 │   └── smoketest.ps1                    # Windows smoke test
-├── .github/workflows/main.yml           # CI/CD pipeline
+├── .github/workflows/                    # CI/CD pipelines
+│   ├── main.yml                         # Main CI/CD pipeline
+│   └── release.yml                      # Release workflow
 ├── bin/                                 # Build outputs (gitignored)
 ├── README.md                            # User documentation
 └── log.md                               # Logging documentation
@@ -184,9 +186,11 @@ ls logs/gitsqlite_*.log
 - **Cross-platform builds** via PowerShell script
 - **JSON logging** with structured output
 - **Temp file I/O** for robustness (not pipes)
+- **CRITICAL**: Never write output to stdout/stderr in filter operations - git uses these for data flow
 - **Version info** injected at build time via ldflags
 - **Git filters** for clean/smudge operations
 - **Diff operation** takes filename (not stdin) unlike clean/smudge
+- **Binary compatibility**: SQL output must be identical across all platforms for consistent git diffs
 
 ## Development Workflow
 
