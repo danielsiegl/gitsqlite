@@ -49,7 +49,8 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer)
 	slog.Info("Starting SQLite selective dump", "dbPath", tmp.Name())
 
 	// Use the new selective dumping method that excludes sqlite_sequence natively
-	if err := eng.DumpTables(dumpCtx, tmp.Name(), out); err != nil {
+	// This now uses the logical filtering function from the filters package
+	if err := DumpTables(dumpCtx, eng, tmp.Name(), out); err != nil {
 		slog.Error("SQLite selective dump failed", "error", err)
 		return err
 	}

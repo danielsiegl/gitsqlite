@@ -4,6 +4,7 @@ gitsqlite
 /testoutput/
 *.sql
 *.log
+*.db
 test-logs/
 /.obsidian/workspace.json
 /.obsidian/core-plugins.json
