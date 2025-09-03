@@ -185,27 +185,27 @@ See [CLI Parameters](#cli-parameters) for all available options.
 - **`diff`**    - Stream SQL dump from binary SQLite database (reads from file, writes to stdout; no filtering)
 
 ### Options
-- **`-sqlite <path>`** - Path to SQLite executable (default: "sqlite3")
+**`-sqlite <path>`** - Path to SQLite executable (default: "sqlite3")
   ```bash
   gitsqlite -sqlite /usr/local/bin/sqlite3 clean < database.db
   ```
-- **`-log`** - Enable logging to file in current directory
+**`-float-precision <digits>`** - Set the number of digits for rounding float values in SQL output (default: 9). Ensures deterministic dumps and consistent diffs across platforms.
+  ```bash
+  gitsqlite -float-precision 8 clean < database.db > database.sql
+  ```
+**`-log`** - Enable logging to file in current directory
   ```bash
   gitsqlite -log clean < database.db > database.sql
   ```
-- **`-log-dir <directory>`** - Log to specified directory instead of current directory
+**`-log-dir <directory>`** - Log to specified directory instead of current directory
   ```bash
   gitsqlite -log-dir ./logs clean < database.db > database.sql
   ```
-- **`-version`** - Show version information
+**`-version`** - Show version information
   ```bash
   gitsqlite -version
   ```
-- **`-sqlite-version`** - Check if SQLite is available and show its version
-  ```bash
-  gitsqlite -sqlite-version
-  ```
-- **`-help`** - Show help information
+**`-help`** - Show help information
   ```bash
   gitsqlite -help
   ```

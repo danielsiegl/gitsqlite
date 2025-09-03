@@ -30,6 +30,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  %s -sqlite /usr/local/bin/sqlite3 clean < database.db\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -log clean < database.db > database.sql\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -log-dir ./logs clean < database.db > database.sql\n", exe)
+	fmt.Fprintf(os.Stderr, "  %s -float-precision 6 clean < database.db > database.sql\n", exe)
 }
 
 // showVersionInfo displays detailed version information and checks SQLite availability
@@ -89,7 +90,7 @@ func validateOperation(logger *slog.Logger, cleanup func()) string {
 }
 
 // executeOperation runs the specified operation with the given engine
-func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, logger *slog.Logger, cleanup func()) {
+func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, floatPrecision int, logger *slog.Logger, cleanup func()) {
 	switch op {
 	case "smudge":
 		logger.Info("starting smudge")
@@ -103,7 +104,7 @@ func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, log
 
 	case "clean":
 		logger.Info("starting clean")
-		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout); err != nil {
+		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout, floatPrecision); err != nil {
 			logger.Error("clean failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
@@ -131,11 +132,12 @@ func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, log
 func main() {
 	// Flags (kept compatible with original main.go)
 	var (
-		showVersion = flag.Bool("version", false, "Show version information")
-		enableLog   = flag.Bool("log", false, "Enable logging to file in current directory")
-		logDir      = flag.String("log-dir", "", "Log to specified directory instead of current directory")
-		sqliteCmd   = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
-		showHelp    = flag.Bool("help", false, "Show help information")
+		showVersion    = flag.Bool("version", false, "Show version information")
+		enableLog      = flag.Bool("log", false, "Enable logging to file in current directory")
+		logDir         = flag.String("log-dir", "", "Log to specified directory instead of current directory")
+		sqliteCmd      = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
+		showHelp       = flag.Bool("help", false, "Show help information")
+		floatPrecision = flag.Int("float-precision", 9, "Number of digits after decimal point for float normalization in INSERT statements")
 	)
 	flag.Usage = usage
 	flag.Parse()
@@ -183,7 +185,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	executeOperation(ctx, op, engine, logger, cleanup)
+	executeOperation(ctx, op, engine, *floatPrecision, logger, cleanup)
 
 	logger.Info("gitsqlite finished successfully", "operation", op)
 }
