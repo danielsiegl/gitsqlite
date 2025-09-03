@@ -15,7 +15,7 @@ import (
 // DumpTables dumps only user tables (excluding sqlite_sequence) using selective filtering.
 // This function combines the technical SQLite dump operation with logical filtering
 // to exclude system tables and normalize floating point values for consistent output.
-func DumpTables(ctx context.Context, eng *sqlite.Engine, dbPath string, out io.Writer) error {
+func DumpTables(ctx context.Context, eng *sqlite.Engine, dbPath string, out io.Writer, floatPrecision int) error {
 	binaryPath, err := eng.GetBinPath()
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func DumpTables(ctx context.Context, eng *sqlite.Engine, dbPath string, out io.W
 		}
 
 		// Apply normalization for consistent cross-platform output
-		line = NormalizeLine(line)
+		line = NormalizeLine(line, floatPrecision)
 
 		// Use the technical I/O operation from sqlite engine
 		if err := eng.WriteWithTimeout(out, []byte(line+"\n"), "clean"); err != nil {

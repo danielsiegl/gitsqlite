@@ -14,7 +14,7 @@ import (
 // Clean reads a binary SQLite DB from 'in', dumps SQL via sqlite engine using
 // selective table dumping to exclude sqlite_sequence, and writes SQL to 'out'.
 // using temporary file for robustness, pipelining would be more efficient - but it has to survive ~500mb files
-func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer) error {
+func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer, floatPrecision int) error {
 	startTime := time.Now()
 	slog.Info("Starting clean operation")
 
@@ -50,7 +50,7 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer)
 
 	// Use the new selective dumping method that excludes sqlite_sequence natively
 	// This now uses the logical filtering function from the filters package
-	if err := DumpTables(dumpCtx, eng, tmp.Name(), out); err != nil {
+	if err := DumpTables(dumpCtx, eng, tmp.Name(), out, floatPrecision); err != nil {
 		slog.Error("SQLite selective dump failed", "error", err)
 		return err
 	}

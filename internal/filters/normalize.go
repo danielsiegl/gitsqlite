@@ -11,14 +11,12 @@ var (
 	// Match decimal floats in INSERT lines (simple & fast).
 	// We limit normalization to INSERT lines to avoid touching DDL, comments, etc.
 	floatRe = regexp.MustCompile(`-?\d+\.\d+`)
-	// Choose your fixed precision for dumps (2 for money, 6/9/etc. otherwise).
-	floatDigits = 9
 )
 
 // NormalizeLine normalizes floating point numbers in SQL INSERT statements
 // to ensure consistent representation across different platforms (Windows/Linux/Mac).
 // This function only processes INSERT lines to avoid affecting DDL or comments.
-func NormalizeLine(line string) string {
+func NormalizeLine(line string, floatPrecision int) string {
 	trimmed := strings.TrimSpace(line)
 	// Only normalize INSERT lines (where values live)
 	if !strings.HasPrefix(trimmed, "INSERT INTO") {
@@ -32,7 +30,7 @@ func NormalizeLine(line string) string {
 			return m // leave as-is if somehow unparsable
 		}
 		// 'f' => decimal, fixed number of digits after the decimal point.
-		return strconv.FormatFloat(f, 'f', floatDigits, 64)
+		return strconv.FormatFloat(f, 'f', floatPrecision, 64)
 	})
 
 	return line
