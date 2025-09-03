@@ -11,15 +11,12 @@
 package sqlite
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os/exec"
-	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -28,34 +25,7 @@ type Engine struct {
 	Bin string
 }
 
-// at top of file
-var (
-	// Match decimal floats in INSERT lines (simple & fast).
-	// We limit normalization to INSERT lines to avoid touching DDL, comments, etc.
-	floatRe = regexp.MustCompile(`-?\d+\.\d+`)
-	// Choose your fixed precision for dumps (2 for money, 6/9/etc. otherwise).
-	floatDigits = 9
-)
 
-func NormalizeLine(line string) string {
-	trimmed := strings.TrimSpace(line)
-	// Only normalize INSERT lines (where values live)
-	if !strings.HasPrefix(trimmed, "INSERT INTO") {
-		return line
-	}
-
-	// Normalize floats to fixed precision using Go's consistent formatter.
-	line = floatRe.ReplaceAllStringFunc(line, func(m string) string {
-		f, err := strconv.ParseFloat(m, 64)
-		if err != nil {
-			return m // leave as-is if somehow unparsable
-		}
-		// 'f' => decimal, fixed number of digits after the decimal point.
-		return strconv.FormatFloat(f, 'f', floatDigits, 64)
-	})
-
-	return line
-}
 
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
 
@@ -66,74 +36,23 @@ func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) erro
 	return cmd.Run()
 }
 
-// DumpTables dumps only user tables (excluding sqlite_sequence) using simple .dump and filtering
-// shouldSkipLine determines if a line should be skipped during dump filtering
-func shouldSkipLine(line string) bool {
-	// Skip CREATE TABLE sqlite_sequence line
-	if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
-		return true
-	}
-	// Skip INSERT INTO sqlite_sequence lines
-	if strings.Contains(line, "INSERT INTO sqlite_sequence") || strings.Contains(line, "INSERT INTO \"sqlite_sequence\"") {
-		return true
-	}
-	// Skip DELETE FROM sqlite_sequence;
-	if strings.Contains(line, "DELETE FROM sqlite_sequence") || strings.Contains(line, "DELETE FROM \"sqlite_sequence\"") {
-		return true
-	}
-	return false
-}
-
-func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) error {
-
-	binaryPath, _ := e.GetBinPath()
-
-	// Run .dump and stream output line by line
-	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
-	stdoutPipe, err := cmd.StdoutPipe()
+// Dump performs a raw SQLite .dump operation without any filtering or normalization.
+// This is a purely technical operation that streams the complete SQLite dump output.
+func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
+	binaryPath, err := e.GetBinPath()
 	if err != nil {
-		return fmt.Errorf("failed to get stdout pipe: %w", err)
+		return err
 	}
+
+	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
+	cmd.Stdout = out
+	
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 
 	slog.Debug("Starting SQLite .dump command")
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start SQLite dump: %w", err)
-	}
-
-	reader := bufio.NewReader(stdoutPipe)
-	for {
-		line, readErr := reader.ReadString('\n')
-		if len(line) == 0 && readErr != nil {
-			break
-		}
-		// this way it should work with CRLF and LF
-		line = strings.TrimRight(line, "\n")
-		line = strings.TrimRight(line, "\r")
-		
-		if shouldSkipLine(line) {
-			continue
-		}
-
-		// **Normalize here**
-		// make sure floating point is rendered the same on linux and windows
-		line = NormalizeLine(line)
-
-		// we probably could have kept LF - but it is easier to read like that
-		if err := e.WriteWithTimeout(out, []byte(line+"\n"), "clean"); err != nil {
-			return err
-		}
-		if readErr != nil {
-			if readErr == io.EOF {
-				break
-			}
-			return fmt.Errorf("error reading dump output: %w", readErr)
-		}
-	}
-
-	if err := cmd.Wait(); err != nil {
+	if err := cmd.Run(); err != nil {
 		stderrOutput := stderr.String()
 		if stderrOutput != "" {
 			return fmt.Errorf("SQLite dump failed: %s: %w", stderrOutput, err)
@@ -141,9 +60,13 @@ func (e *Engine) DumpTables(ctx context.Context, dbPath string, out io.Writer) e
 		return fmt.Errorf("SQLite dump failed: %w", err)
 	}
 
-	slog.Debug("DumpTables completed successfully")
+	slog.Debug("Dump completed successfully")
 	return nil
 }
+
+
+
+
 
 // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
