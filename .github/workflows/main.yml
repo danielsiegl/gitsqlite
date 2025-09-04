@@ -254,7 +254,7 @@ jobs:
         echo "=== Testing Schema/Data Separation Feature ==="
         
         echo "Step 1: Extract data-only + schema to separate files"
-        ./bin/gitsqlite-linux-amd64 -data-only -schema-output .gitsqliteschema clean < smoketest.db > data_only.sql
+        ./bin/gitsqlite-linux-amd64 -data-only -schema clean < smoketest.db > data_only.sql
         
         echo "Step 2: Verify schema file was created"
         if [ ! -f .gitsqliteschema ]; then
@@ -295,7 +295,7 @@ jobs:
         fi
         
         echo "Step 7: Test diff operation with schema/data separation"
-        ./bin/gitsqlite-linux-amd64 -data-only -schema-output schema_diff.sql diff smoketest.db > data_diff.sql
+        ./bin/gitsqlite-linux-amd64 -data-only -schema-file schema_diff.sql diff smoketest.db > data_diff.sql
         
         if ! diff data_only.sql data_diff.sql; then
           echo "ERROR: Clean and diff produce different data-only output"

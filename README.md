@@ -76,8 +76,8 @@ For cleaner diffs that only show data changes, use the schema/data separation fe
 1. **Configure Git filters for data-only mode**:
    ```bash
    echo '*.db filter=gitsqlite-data' >> .gitattributes
-   git config filter.gitsqlite-data.clean "gitsqlite -data-only -schema-output .gitsqliteschema clean"
-   git config filter.gitsqlite-data.smudge "gitsqlite -schema-file .gitsqliteschema smudge"
+   git config filter.gitsqlite-data.clean "gitsqlite -data-only -schema clean"
+   git config filter.gitsqlite-data.smudge "gitsqlite -schema smudge"
    ```
 
 2. **Add schema file to Git**:
@@ -242,16 +242,18 @@ See [CLI Parameters](#cli-parameters) for all available options.
   gitsqlite -data-only diff database.db > data.sql
   ```
 
-**`-schema-output <file>`** - Save schema to this file during clean/diff (default: do not save schema separately)
+**`-schema`** - Use .gitsqliteschema file for schema/data separation (works with all operations)
   ```bash
-  gitsqlite -schema-output .gitsqliteschema clean < database.db > data.sql
-  gitsqlite -schema-output schema.sql diff database.db > data.sql
+  gitsqlite -schema clean < database.db > data.sql
+  gitsqlite -schema smudge < data.sql > database.db
+  gitsqlite -schema diff database.db > data.sql
   ```
 
-**`-schema-file <file>`** - For smudge: read schema from this file instead of stdin (default: ".gitsqliteschema")
+**`-schema-file <file>`** - Use specified file for schema/data separation (works with all operations)
   ```bash
-  gitsqlite -schema-file .gitsqliteschema smudge < data.sql > database.db
-  gitsqlite -schema-file custom_schema.sql smudge < data.sql > database.db
+  gitsqlite -schema-file schema.sql clean < database.db > data.sql
+  gitsqlite -schema-file schema.sql smudge < data.sql > database.db
+  gitsqlite -schema-file schema.sql diff database.db > data.sql
   ```
 
 ## Examples
@@ -262,7 +264,6 @@ See [CLI Parameters](#cli-parameters) for all available options.
 ```bash
 sqlite3 sample.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users (name, email) VALUES ('John Doe', 'john@example.com'), ('Jane Smith', 'jane@example.com');"
 ```
-
 
 2. **Convert to SQL text:**
 ```bash
@@ -308,7 +309,7 @@ The schema/data separation feature allows you to store database schema and data 
 1. **Separate schema and data during clean:**
 ```bash
 # Extract data-only (INSERT statements) and save schema to separate file
-gitsqlite -data-only -schema-output .gitsqliteschema clean < database.db > data.sql
+gitsqlite -data-only -schema clean < database.db > data.sql
 ```
 
 2. **View the separated files:**
@@ -332,7 +333,7 @@ cat data.sql
 3. **Restore database from separated files:**
 ```bash
 # Combine schema and data back into database
-gitsqlite -schema-file .gitsqliteschema smudge < data.sql > restored.db
+gitsqlite -schema smudge < data.sql > restored.db
 ```
 
 4. **Benefit: Cleaner diffs that show only data changes:**
