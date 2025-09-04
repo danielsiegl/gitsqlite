@@ -35,7 +35,9 @@ func Diff(ctx context.Context, eng *sqlite.Engine, dbFile string, out io.Writer,
 	}
 
 	// For data output, use DumpTables with filtering
-	if err := DumpTables(ctx, eng, dbFile, out, 9, dataOnly); err != nil {
+	// When schema is saved to a separate file, only output data to stdout
+	outputDataOnly := dataOnly || (schemaOutput != "")
+	if err := DumpTables(ctx, eng, dbFile, out, 9, outputDataOnly); err != nil {
 		slog.Error("Diff dump failed", "error", err)
 		return err
 	}
