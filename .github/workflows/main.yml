@@ -335,7 +335,7 @@ jobs:
         retention-days: 5
 
   cross-evaluate:
-    needs: [test-ubuntu-amd64, test-windows-amd64, test-schema-data-separation]
+    needs: [test-ubuntu-amd64, test-windows-amd64]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
