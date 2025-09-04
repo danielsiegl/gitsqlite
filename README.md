@@ -92,7 +92,7 @@ For cleaner diffs that only show data changes, use the schema/data separation fe
    git commit -m "Add database data"
    ```
 
-Git will now store only data changes in the database file, while schema is managed separately. This results in much cleaner diffs that only show INSERT/UPDATE/DELETE operations.
+Git will now store only data changes in the database file, while schema is managed separately. This results in much cleaner diffs that only show INSERT operations.
 
 ## Quick Start Git Diff
 
