@@ -265,7 +265,6 @@ See [CLI Parameters](#cli-parameters) for all available options.
 sqlite3 sample.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users (name, email) VALUES ('John Doe', 'john@example.com'), ('Jane Smith', 'jane@example.com');"
 ```
 
-
 2. **Convert to SQL text:**
 ```bash
 gitsqlite clean < sample.db > sample.sql
