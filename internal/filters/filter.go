@@ -20,3 +20,51 @@ func ShouldSkipLine(line string) bool {
 	}
 	return false
 }
+
+// IsSchemaLine determines if a line contains schema definition statements.
+// These are CREATE TABLE, CREATE INDEX, CREATE VIEW, etc.
+func IsSchemaLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	
+	// Schema statements
+	return strings.HasPrefix(trimmed, "CREATE TABLE") ||
+		strings.HasPrefix(trimmed, "CREATE INDEX") ||
+		strings.HasPrefix(trimmed, "CREATE UNIQUE INDEX") ||
+		strings.HasPrefix(trimmed, "CREATE VIEW") ||
+		strings.HasPrefix(trimmed, "CREATE TRIGGER") ||
+		strings.HasPrefix(trimmed, "CREATE VIRTUAL TABLE")
+}
+
+// IsDataLine determines if a line contains data manipulation statements.
+// These are INSERT, UPDATE, DELETE statements.
+func IsDataLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	
+	// Data manipulation statements
+	return strings.HasPrefix(trimmed, "INSERT INTO") ||
+		strings.HasPrefix(trimmed, "UPDATE ") ||
+		strings.HasPrefix(trimmed, "DELETE FROM")
+}
+
+// IsPragmaOrStructuralLine determines if a line is a structural SQL statement
+// that should be included in both schema and data outputs.
+func IsPragmaOrStructuralLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	
+	// Structural statements that should be in both
+	return strings.HasPrefix(trimmed, "PRAGMA") ||
+		strings.HasPrefix(trimmed, "BEGIN") ||
+		strings.HasPrefix(trimmed, "COMMIT") ||
+		strings.HasPrefix(trimmed, "ROLLBACK") ||
+		trimmed == "BEGIN TRANSACTION;" ||
+		trimmed == "COMMIT;"
+}

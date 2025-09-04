@@ -31,6 +31,10 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  %s -log clean < database.db > database.sql\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -log-dir ./logs clean < database.db > database.sql\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -float-precision 6 clean < database.db > database.sql\n", exe)
+	fmt.Fprintf(os.Stderr, "\nSchema/Data Separation Examples:\n")
+	fmt.Fprintf(os.Stderr, "  %s -data-only clean < database.db > data.sql\n", exe)
+	fmt.Fprintf(os.Stderr, "  %s -schema-output .gitsqliteschema clean < database.db > data.sql\n", exe)
+	fmt.Fprintf(os.Stderr, "  %s -schema-file .gitsqliteschema smudge < data.sql > database.db\n", exe)
 }
 
 // showVersionInfo displays detailed version information and checks SQLite availability
@@ -90,11 +94,11 @@ func validateOperation(logger *slog.Logger, cleanup func()) string {
 }
 
 // executeOperation runs the specified operation with the given engine
-func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, floatPrecision int, logger *slog.Logger, cleanup func()) {
+func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, floatPrecision int, dataOnly bool, schemaFile string, schemaOutput string, logger *slog.Logger, cleanup func()) {
 	switch op {
 	case "smudge":
 		logger.Info("starting smudge")
-		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout); err != nil {
+		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout, schemaFile); err != nil {
 			logger.Error("smudge failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
@@ -104,10 +108,10 @@ func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, flo
 
 	case "clean":
 		logger.Info("starting clean")
-		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout, floatPrecision); err != nil {
+		if err := filters.Clean(ctx, engine, os.Stdin, os.Stdout, floatPrecision, dataOnly, schemaOutput); err != nil {
 			logger.Error("clean failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
-			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error running SQLite command for clean operation: %v\n", err)
 			os.Exit(3)
 		}
 		logger.Info("clean completed")
@@ -119,7 +123,7 @@ func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, flo
 			os.Exit(2)
 		}
 		dbFile := flag.Arg(1)
-		if err := filters.Diff(ctx, engine, dbFile, os.Stdout); err != nil {
+		if err := filters.Diff(ctx, engine, dbFile, os.Stdout, dataOnly, schemaOutput); err != nil {
 			logger.Error("diff failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for diff operation: %v\n", err)
@@ -138,6 +142,9 @@ func main() {
 		sqliteCmd      = flag.String("sqlite", "sqlite3", "Path to SQLite executable")
 		showHelp       = flag.Bool("help", false, "Show help information")
 		floatPrecision = flag.Int("float-precision", 9, "Number of digits after decimal point for float normalization in INSERT statements")
+		dataOnly       = flag.Bool("data-only", false, "For clean/diff: output only data (INSERT statements), no schema")
+		schemaFile     = flag.String("schema-file", ".gitsqliteschema", "For smudge: read schema from this file instead of stdin")
+		schemaOutput   = flag.String("schema-output", "", "Save schema to this file during clean/diff (default: do not save schema separately)")
 	)
 	flag.Usage = usage
 	flag.Parse()
@@ -185,7 +192,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	executeOperation(ctx, op, engine, *floatPrecision, logger, cleanup)
+	executeOperation(ctx, op, engine, *floatPrecision, *dataOnly, *schemaFile, *schemaOutput, logger, cleanup)
 
 	logger.Info("gitsqlite finished successfully", "operation", op)
 }
