@@ -1,5 +1,0 @@
-PRAGMA foreign_keys=OFF;
-BEGIN TRANSACTION;
-CREATE TABLE products(id INTEGER PRIMARY KEY, name TEXT, price REAL);
-CREATE TABLE orders(id INTEGER PRIMARY KEY, product_id INTEGER, quantity INTEGER);
-COMMIT;
