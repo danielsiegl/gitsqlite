@@ -73,4 +73,96 @@ fi
 echo "Cleaning up..."
 rm -f smoketest.db smoketest_output1.sql smoketest_output2.db smoketest_output2.sql
 
+# Add new schema flag tests
+echo ""
+echo "=== Testing new schema flags ==="
+
+#create a sqlite database with a table and some data
+sqlite3 schema_test.db <<EOF
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);
+INSERT INTO users (name) VALUES ('Alice'), ('Bob'), ('Charlie');
+EOF
+
+echo "Step 5: Testing -schema flag (clean)"
+./gitsqlite.exe -schema clean < schema_test.db > schema_test_data.sql
+
+if [ ! -f .gitsqliteschema ]; then
+    echo "FAILED: .gitsqliteschema file was not created"
+    exit_code=1
+elif [ ! -f schema_test_data.sql ]; then
+    echo "FAILED: schema_test_data.sql file was not created"
+    exit_code=1
+else
+    echo "SUCCESS: Schema separation files created"
+fi
+
+echo "Step 6: Testing -schema flag (smudge)"
+./gitsqlite.exe -schema smudge < schema_test_data.sql > schema_test_restored.db
+
+if [ ! -f schema_test_restored.db ]; then
+    echo "FAILED: schema_test_restored.db was not created"
+    exit_code=1
+else
+    # Verify database contents
+    restored_count=$(sqlite3 schema_test_restored.db "SELECT COUNT(*) FROM users;")
+    if [ "$restored_count" = "3" ]; then
+        echo "SUCCESS: Schema flag smudge test passed"
+    else
+        echo "FAILED: Restored database has $restored_count rows, expected 3"
+        exit_code=1
+    fi
+fi
+
+echo "Step 7: Testing -schema-file flag with custom filename"
+./gitsqlite.exe -schema-file custom.schema clean < schema_test.db > schema_test_custom.sql
+
+if [ ! -f custom.schema ]; then
+    echo "FAILED: custom.schema file was not created"
+    exit_code=1
+elif [ ! -f schema_test_custom.sql ]; then
+    echo "FAILED: schema_test_custom.sql file was not created"
+    exit_code=1
+else
+    echo "SUCCESS: Custom schema file created"
+fi
+
+echo "Step 8: Testing -schema-file flag (smudge)"
+./gitsqlite.exe -schema-file custom.schema smudge < schema_test_custom.sql > schema_test_custom_restored.db
+
+if [ ! -f schema_test_custom_restored.db ]; then
+    echo "FAILED: schema_test_custom_restored.db was not created"
+    exit_code=1
+else
+    # Verify database contents
+    custom_count=$(sqlite3 schema_test_custom_restored.db "SELECT COUNT(*) FROM users;")
+    if [ "$custom_count" = "3" ]; then
+        echo "SUCCESS: Custom schema file smudge test passed"
+    else
+        echo "FAILED: Custom restored database has $custom_count rows, expected 3"
+        exit_code=1
+    fi
+fi
+
+echo "Step 9: Testing diff operation with -schema flag"
+./gitsqlite.exe -schema diff schema_test.db > schema_test_diff.sql
+
+if [ ! -f schema_test_diff.sql ]; then
+    echo "FAILED: schema_test_diff.sql was not created"
+    exit_code=1
+else
+    # Compare diff output with clean output (should be identical for data)
+    if diff schema_test_data.sql schema_test_diff.sql > /dev/null; then
+        echo "SUCCESS: Diff operation with schema flag passed"
+    else
+        echo "FAILED: Diff output differs from clean output"
+        exit_code=1
+    fi
+fi
+
+# Cleanup schema test files
+echo "Cleaning up schema test files..."
+rm -f schema_test.db schema_test_data.sql schema_test_restored.db 
+rm -f schema_test_custom.sql schema_test_custom_restored.db schema_test_diff.sql
+rm -f .gitsqliteschema custom.schema
+
 exit $exit_code
