@@ -2,6 +2,7 @@ package filters
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -13,7 +14,9 @@ import (
 
 // Smudge reads SQL from 'in', restores into a temporary SQLite DB using the engine,
 // then streams the resulting DB bytes to 'out'.
-func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer) error {
+// If schemaFile is not empty and the file exists, schema is read from that file 
+// and combined with data from 'in'.
+func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer, schemaFile string) error {
 	startTime := time.Now()
 	slog.Info("Starting smudge operation")
 
@@ -27,9 +30,37 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 	defer os.Remove(tmpPath)
 
 	restoreStart := time.Now()
-	if err := eng.Restore(ctx, tmpPath, in); err != nil {
-		slog.Error("SQLite restore failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
-		return err
+	
+	// If schema file is specified and exists, combine schema + data
+	if schemaFile != "" {
+		if _, err := os.Stat(schemaFile); err == nil {
+			slog.Info("Combining schema from file with data from stdin", "schemaFile", schemaFile)
+			
+			// Create a combined reader: schema first, then data
+			schemaFileReader, err := os.Open(schemaFile)
+			if err != nil {
+				slog.Error("Failed to open schema file", "file", schemaFile, "error", err)
+				return err
+			}
+			defer schemaFileReader.Close()
+			
+			// Combine schema and data streams
+			combinedReader := io.MultiReader(schemaFileReader, in)
+			
+			if err := eng.Restore(ctx, tmpPath, combinedReader); err != nil {
+				slog.Error("SQLite restore with schema file failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
+				return err
+			}
+		} else {
+			slog.Error("Schema file specified but not found", "schemaFile", schemaFile)
+			return fmt.Errorf("schema file not found: %s", schemaFile)
+		}
+	} else {
+		// Normal restore without schema file
+		if err := eng.Restore(ctx, tmpPath, in); err != nil {
+			slog.Error("SQLite restore failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
+			return err
+		}
 	}
 	restoreDuration := time.Since(restoreStart)
 	slog.Info("SQLite restore completed", "duration", logging.FormatDuration(restoreDuration))

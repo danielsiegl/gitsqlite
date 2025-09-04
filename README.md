@@ -69,6 +69,31 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
 
 Git will automatically convert SQLite files to SQL text for storage and back to binary when checked out.
 
+## Quick Start: Schema/Data Separation
+
+For cleaner diffs that only show data changes, use the schema/data separation feature:
+
+1. **Configure Git filters for data-only mode**:
+   ```bash
+   echo '*.db filter=gitsqlite-data' >> .gitattributes
+   git config filter.gitsqlite-data.clean "gitsqlite -data-only -schema-output .gitsqliteschema clean"
+   git config filter.gitsqlite-data.smudge "gitsqlite -schema-file .gitsqliteschema smudge"
+   ```
+
+2. **Add schema file to Git**:
+   ```bash
+   git add .gitsqliteschema
+   git commit -m "Add database schema"
+   ```
+
+3. **Version your database**:
+   ```bash
+   git add mydb.db
+   git commit -m "Add database data"
+   ```
+
+Git will now store only data changes in the database file, while schema is managed separately. This results in much cleaner diffs that only show INSERT operations.
+
 ## Quick Start Git Diff
 
 To enable SQL-based diffs for SQLite databases in Git, add the following to your repository's `.gitattributes` and configure your Git diff driver: (It doesn't matter if it is stored as binary or via smudge/clean.)
@@ -210,6 +235,25 @@ See [CLI Parameters](#cli-parameters) for all available options.
   gitsqlite -help
   ```
 
+### Schema/Data Separation Options
+**`-data-only`** - For clean/diff: output only data (INSERT statements), no schema
+  ```bash
+  gitsqlite -data-only clean < database.db > data.sql
+  gitsqlite -data-only diff database.db > data.sql
+  ```
+
+**`-schema-output <file>`** - Save schema to this file during clean/diff (default: do not save schema separately)
+  ```bash
+  gitsqlite -schema-output .gitsqliteschema clean < database.db > data.sql
+  gitsqlite -schema-output schema.sql diff database.db > data.sql
+  ```
+
+**`-schema-file <file>`** - For smudge: read schema from this file instead of stdin (default: ".gitsqliteschema")
+  ```bash
+  gitsqlite -schema-file .gitsqliteschema smudge < data.sql > database.db
+  gitsqlite -schema-file custom_schema.sql smudge < data.sql > database.db
+  ```
+
 ## Examples
 
 ### Quick Start Example
@@ -255,6 +299,47 @@ gitsqlite smudge < sample.sql > restored.db
 5. **Verify the restoration:**
 ```bash
 sqlite3 restored.db "SELECT * FROM users;"
+```
+
+### Schema/Data Separation Workflow
+
+The schema/data separation feature allows you to store database schema and data separately for cleaner Git workflows and easier diff viewing.
+
+1. **Separate schema and data during clean:**
+```bash
+# Extract data-only (INSERT statements) and save schema to separate file
+gitsqlite -data-only -schema-output .gitsqliteschema clean < database.db > data.sql
+```
+
+2. **View the separated files:**
+```bash
+# Schema file contains CREATE TABLE statements
+cat .gitsqliteschema
+# PRAGMA foreign_keys=OFF;
+# BEGIN TRANSACTION;
+# CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
+# COMMIT;
+
+# Data file contains INSERT statements
+cat data.sql
+# PRAGMA foreign_keys=OFF;
+# BEGIN TRANSACTION;
+# INSERT INTO users VALUES(1,'John Doe','john@example.com');
+# INSERT INTO users VALUES(2,'Jane Smith','jane@example.com');
+# COMMIT;
+```
+
+3. **Restore database from separated files:**
+```bash
+# Combine schema and data back into database
+gitsqlite -schema-file .gitsqliteschema smudge < data.sql > restored.db
+```
+
+4. **Benefit: Cleaner diffs that show only data changes:**
+```bash
+# After modifying data, diff will only show INSERT/UPDATE/DELETE changes
+gitsqlite -data-only clean < modified.db > modified_data.sql
+diff data.sql modified_data.sql
 ```
 
 ### Advanced Usage Examples
