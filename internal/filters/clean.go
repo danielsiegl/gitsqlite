@@ -68,7 +68,9 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer,
 
 	// Use the new selective dumping method that excludes sqlite_sequence natively
 	// This now uses the logical filtering function from the filters package
-	if err := DumpTables(dumpCtx, eng, tmp.Name(), out, floatPrecision, dataOnly); err != nil {
+	// When schema is saved to a separate file, only output data to stdout
+	outputDataOnly := dataOnly || (schemaOutput != "")
+	if err := DumpTables(dumpCtx, eng, tmp.Name(), out, floatPrecision, outputDataOnly); err != nil {
 		slog.Error("SQLite selective dump failed", "error", err)
 		return err
 	}
