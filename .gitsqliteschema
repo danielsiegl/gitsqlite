@@ -1,0 +1,33 @@
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT);
+CREATE TABLE products (
+    product_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    price DECIMAL(10,2),
+    category TEXT,
+    in_stock BOOLEAN DEFAULT 1
+);
+CREATE TABLE orders (
+    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_name TEXT NOT NULL,
+    order_date TEXT DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(10,2),
+    status TEXT CHECK(status IN ('pending', 'shipped', 'delivered', 'cancelled'))
+);
+CREATE TABLE employees (
+    emp_id INTEGER PRIMARY KEY,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT UNIQUE,
+    hire_date TEXT,
+    salary INTEGER,
+    department_id INTEGER
+);
+CREATE TABLE departments (
+    dept_id INTEGER PRIMARY KEY,
+    dept_name TEXT NOT NULL,
+    manager_id INTEGER,
+    budget INTEGER
+);
+COMMIT;

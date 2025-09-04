@@ -111,6 +111,8 @@ func DumpSchema(ctx context.Context, eng *sqlite.Engine, dbPath string, out io.W
 	}
 
 	reader := bufio.NewReader(stdoutPipe)
+	var inCreateStatement bool
+	
 	for {
 		line, readErr := reader.ReadString('\n')
 		if len(line) == 0 && readErr != nil {
@@ -125,12 +127,25 @@ func DumpSchema(ctx context.Context, eng *sqlite.Engine, dbPath string, out io.W
 			continue
 		}
 
-		// Only include schema lines or structural lines
-		if IsSchemaLine(line) || IsPragmaOrStructuralLine(line) {
+		// Handle multi-line CREATE statements
+		trimmed := strings.TrimSpace(line)
+		
+		// Check if we're starting a CREATE statement
+		if IsSchemaLine(line) {
+			inCreateStatement = true
+		}
+		
+		// Include line if it's a schema line, structural line, or we're inside a CREATE statement
+		if IsSchemaLine(line) || IsPragmaOrStructuralLine(line) || inCreateStatement {
 			// Use the technical I/O operation from sqlite engine
 			if err := eng.WriteWithTimeout(out, []byte(line+"\n"), "schema"); err != nil {
 				return err
 			}
+		}
+		
+		// Check if we're ending a CREATE statement (line ends with semicolon)
+		if inCreateStatement && strings.HasSuffix(trimmed, ";") {
+			inCreateStatement = false
 		}
 		
 		if readErr != nil {
