@@ -20,7 +20,14 @@ jobs:
       with:
         go-version: '1.24'
         cache: false
-
+    - name: Check gofmt compliance
+      shell: bash
+      run: |
+        gofmt -s -l .
+        if [ "$(gofmt -s -l . | wc -l)" -ne 0 ]; then
+          echo "Go code is not gofmt compliant. Run 'gofmt -s -w .' to fix." >&2
+          exit 1
+        fi
     - name: Build
       run: ./buildscripts/build.ps1
     

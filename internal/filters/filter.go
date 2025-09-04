@@ -28,7 +28,7 @@ func IsSchemaLine(line string) bool {
 	if trimmed == "" {
 		return false
 	}
-	
+
 	// Schema statements
 	return strings.HasPrefix(trimmed, "CREATE TABLE") ||
 		strings.HasPrefix(trimmed, "CREATE INDEX") ||
@@ -45,7 +45,7 @@ func IsDataLine(line string) bool {
 	if trimmed == "" {
 		return false
 	}
-	
+
 	// Data manipulation statements
 	return strings.HasPrefix(trimmed, "INSERT INTO") ||
 		strings.HasPrefix(trimmed, "UPDATE ") ||
@@ -59,7 +59,7 @@ func IsPragmaOrStructuralLine(line string) bool {
 	if trimmed == "" {
 		return false
 	}
-	
+
 	// Structural statements that should be in both
 	return strings.HasPrefix(trimmed, "PRAGMA") ||
 		strings.HasPrefix(trimmed, "BEGIN") ||

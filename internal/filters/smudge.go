@@ -14,7 +14,7 @@ import (
 
 // Smudge reads SQL from 'in', restores into a temporary SQLite DB using the engine,
 // then streams the resulting DB bytes to 'out'.
-// If schemaFile is not empty and the file exists, schema is read from that file 
+// If schemaFile is not empty and the file exists, schema is read from that file
 // and combined with data from 'in'.
 func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer, schemaFile string) error {
 	startTime := time.Now()
@@ -30,12 +30,12 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 	defer os.Remove(tmpPath)
 
 	restoreStart := time.Now()
-	
+
 	// If schema file is specified and exists, combine schema + data
 	if schemaFile != "" {
 		if _, err := os.Stat(schemaFile); err == nil {
 			slog.Info("Combining schema from file with data from stdin", "schemaFile", schemaFile)
-			
+
 			// Create a combined reader: schema first, then data
 			schemaFileReader, err := os.Open(schemaFile)
 			if err != nil {
@@ -43,10 +43,10 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 				return err
 			}
 			defer schemaFileReader.Close()
-			
+
 			// Combine schema and data streams
 			combinedReader := io.MultiReader(schemaFileReader, in)
-			
+
 			if err := eng.Restore(ctx, tmpPath, combinedReader); err != nil {
 				slog.Error("SQLite restore with schema file failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
 				return err

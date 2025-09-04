@@ -26,7 +26,7 @@ func Diff(ctx context.Context, eng *sqlite.Engine, dbFile string, out io.Writer,
 			return err
 		}
 		defer schemaFile.Close()
-		
+
 		if err := DumpSchema(ctx, eng, dbFile, schemaFile); err != nil {
 			slog.Error("Schema dump failed", "error", err)
 			return err

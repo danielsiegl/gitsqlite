@@ -30,6 +30,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  %s -sqlite /usr/local/bin/sqlite3 clean < database.db\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -log clean < database.db > database.sql\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s -log-dir ./logs clean < database.db > database.sql\n", exe)
+
 	fmt.Fprintf(os.Stderr, "  %s -float-precision 6 clean < database.db > database.sql\n", exe)
 	fmt.Fprintf(os.Stderr, "\nSchema/Data Separation Examples:\n")
 	fmt.Fprintf(os.Stderr, "  %s -data-only clean < database.db > data.sql\n", exe)
@@ -63,11 +64,13 @@ func showVersionInfo(sqliteCmd string, logger *slog.Logger, cleanup func()) {
 	engine := &sqlite.Engine{Bin: sqliteCmd}
 	sqlitePath, version, err := engine.CheckAvailability()
 	if err != nil {
+
 		logger.Error("sqlite availability check failed", "sqlite_cmd", sqliteCmd, "error", err)
 		cleanup() // Ensure log is flushed before exit
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
 		os.Exit(2)
+
 	}
 	fmt.Printf("SQLite found at: %s\n", sqlitePath)
 	fmt.Printf("SQLite version: %s\n", version)

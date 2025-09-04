@@ -58,7 +58,7 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer,
 			return err
 		}
 		defer schemaFile.Close()
-		
+
 		if err := DumpSchema(dumpCtx, eng, tmp.Name(), schemaFile); err != nil {
 			slog.Error("Schema dump failed", "error", err)
 			return err

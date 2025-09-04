@@ -25,8 +25,6 @@ type Engine struct {
 	Bin string
 }
 
-
-
 func (e *Engine) Restore(ctx context.Context, dbPath string, sql io.Reader) error {
 
 	binaryPath, _ := e.GetBinPath()
@@ -46,7 +44,7 @@ func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
 
 	cmd := exec.CommandContext(ctx, binaryPath, dbPath, ".dump")
 	cmd.Stdout = out
-	
+
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 
@@ -63,10 +61,6 @@ func (e *Engine) Dump(ctx context.Context, dbPath string, out io.Writer) error {
 	slog.Debug("Dump completed successfully")
 	return nil
 }
-
-
-
-
 
 // ValidateBinary checks if the SQLite binary is available and accessible, including package manager locations
 func (e *Engine) ValidateBinary() error {
