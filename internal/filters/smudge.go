@@ -2,6 +2,7 @@ package filters
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -51,11 +52,8 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 				return err
 			}
 		} else {
-			slog.Info("Schema file not found, proceeding with data-only restore", "schemaFile", schemaFile)
-			if err := eng.Restore(ctx, tmpPath, in); err != nil {
-				slog.Error("SQLite restore failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
-				return err
-			}
+			slog.Error("Schema file specified but not found", "schemaFile", schemaFile)
+			return fmt.Errorf("schema file not found: %s", schemaFile)
 		}
 	} else {
 		// Normal restore without schema file

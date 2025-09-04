@@ -143,7 +143,7 @@ func main() {
 		showHelp       = flag.Bool("help", false, "Show help information")
 		floatPrecision = flag.Int("float-precision", 9, "Number of digits after decimal point for float normalization in INSERT statements")
 		dataOnly       = flag.Bool("data-only", false, "For clean/diff: output only data (INSERT statements), no schema")
-		schemaFile     = flag.String("schema-file", ".gitsqliteschema", "For smudge: read schema from this file instead of stdin")
+		schemaFile     = flag.String("schema-file", "", "For smudge: read schema from this file instead of stdin (default: .gitsqliteschema if file exists)")
 		schemaOutput   = flag.String("schema-output", "", "Save schema to this file during clean/diff (default: do not save schema separately)")
 	)
 	flag.Usage = usage
