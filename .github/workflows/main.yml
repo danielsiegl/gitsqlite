@@ -1,375 +1,395 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+  # This workflow will build a golang project
+  # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+  name: Build gitsqlite
 
-name: Build gitsqlite
+  on:
+    push:
 
-on:
-  push:
-  
-jobs:
-  build:
-    defaults:
-      run:
+  jobs:
+    build:
+      defaults:
+        run:
+          shell: pwsh
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: false
+      - name: Check gofmt compliance
+        shell: bash
+        run: |
+          gofmt -s -l .
+          if [ "$(gofmt -s -l . | wc -l)" -ne 0 ]; then
+            echo "Go code is not gofmt compliant. Run 'gofmt -s -w .' to fix." >&2
+            exit 1
+          fi
+      - name: Build
+        run: ./buildscripts/build.ps1
+      
+      - name: Upload binary Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin/**/*
+          retention-days: 5
+
+    create-smoketest-db:
+      needs: build
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Create smoketest database
         shell: pwsh
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
+        run: ./buildscripts/createtestdatabase.ps1
+      - name: Upload smoketest database
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoketest-db
+          path: smoketest.db
+          retention-days: 5
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.24'
-        cache: false
-    - name: Check gofmt compliance
-      shell: bash
-      run: |
-        gofmt -s -l .
-        if [ "$(gofmt -s -l . | wc -l)" -ne 0 ]; then
-          echo "Go code is not gofmt compliant. Run 'gofmt -s -w .' to fix." >&2
-          exit 1
-        fi
-    - name: Build
-      run: ./buildscripts/build.ps1
-    
-    - name: Upload binary Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin/**/*
-        retention-days: 5
+    test-diff-filter:
+      needs: [build, create-smoketest-db]
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin
+      - name: Download smoketest database
+        uses: actions/download-artifact@v4
+        with:
+          name: smoketest-db
+          path: .
+      - name: Make diff filter binary executable
+        run: chmod +x bin/gitsqlite-linux-amd64
+      - name: Run diff filter against smoketest.db
+        run: ./bin/gitsqlite-linux-amd64 diff smoketest.db > smoketest_diff.sql
+      - name: Output line and statement counts
+        run: |
+          echo "Total lines: $(wc -l < smoketest_diff.sql)"
+          echo "CREATE statements: $(grep -c -E '^CREATE ' smoketest_diff.sql)"
+          echo "INSERT statements: $(grep -c -E '^INSERT ' smoketest_diff.sql)"
+          if grep -q -E '^CREATE ' smoketest_diff.sql && grep -q -E '^INSERT ' smoketest_diff.sql; then
+            echo "Diff filter output contains CREATE and INSERT statements."
+          else
+            echo "Diff filter output missing CREATE or INSERT statements!"
+            exit 1
+          fi
+    test-ubuntu-amd64:
+      needs: [build, create-smoketest-db]
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin
+      - name: Make Linux binary executable
+        run: chmod +x bin/gitsqlite-linux-amd64
+      
+      - name: Download smoketest database
+        uses: actions/download-artifact@v4
+        with:
+          name: smoketest-db
+          path: .
+      
+      - name: Run integrated smoketest
+        run: |
+          echo "Step 1: Database -> SQL (clean)"
+          ./bin/gitsqlite-linux-amd64 clean < smoketest.db > smoketest_output1.sql
+          
+          echo "Step 2: SQL -> Database (smudge)"
+          ./bin/gitsqlite-linux-amd64 smudge < smoketest_output1.sql > smoketest_output2.db
+          
+          echo "Step 3: Database -> SQL (clean again)"
+          ./bin/gitsqlite-linux-amd64 clean < smoketest_output2.db > smoketest_output2.sql
+      
+      - name: Evaluate test results
+        shell: pwsh
+        run: ./buildscripts/evaluatetest.ps1
 
-  create-smoketest-db:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Create smoketest database
-      shell: pwsh
-      run: ./buildscripts/createtestdatabase.ps1
-    - name: Upload smoketest database
-      uses: actions/upload-artifact@v4
-      with:
-        name: smoketest-db
-        path: smoketest.db
-        retention-days: 5
+      - name: Upload SQL Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-artifacts-ubuntu-amd64
+          path: '*.sql'
+          retention-days: 5
 
-  test-diff-filter:
-    needs: [build, create-smoketest-db]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Download binaries
-      uses: actions/download-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin
-    - name: Download smoketest database
-      uses: actions/download-artifact@v4
-      with:
-        name: smoketest-db
-        path: .
-    - name: Make diff filter binary executable
-      run: chmod +x bin/gitsqlite-linux-amd64
-    - name: Run diff filter against smoketest.db
-      run: ./bin/gitsqlite-linux-amd64 diff smoketest.db > smoketest_diff.sql
-    - name: Output line and statement counts
-      run: |
-        echo "Total lines: $(wc -l < smoketest_diff.sql)"
-        echo "CREATE statements: $(grep -c -E '^CREATE ' smoketest_diff.sql)"
-        echo "INSERT statements: $(grep -c -E '^INSERT ' smoketest_diff.sql)"
-        if grep -q -E '^CREATE ' smoketest_diff.sql && grep -q -E '^INSERT ' smoketest_diff.sql; then
-          echo "Diff filter output contains CREATE and INSERT statements."
-        else
-          echo "Diff filter output missing CREATE or INSERT statements!"
-          exit 1
-        fi
-  test-ubuntu-amd64:
-    needs: [build, create-smoketest-db]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin
-    - name: Make Linux binary executable
-      run: chmod +x bin/gitsqlite-linux-amd64
-    
-    - name: Download smoketest database
-      uses: actions/download-artifact@v4
-      with:
-        name: smoketest-db
-        path: .
-    
-    - name: Run integrated smoketest
-      run: |
-        echo "Step 1: Database -> SQL (clean)"
-        ./bin/gitsqlite-linux-amd64 clean < smoketest.db > smoketest_output1.sql
-        
-        echo "Step 2: SQL -> Database (smudge)"
-        ./bin/gitsqlite-linux-amd64 smudge < smoketest_output1.sql > smoketest_output2.db
-        
-        echo "Step 3: Database -> SQL (clean again)"
-        ./bin/gitsqlite-linux-amd64 clean < smoketest_output2.db > smoketest_output2.sql
-    
-    - name: Evaluate test results
-      shell: pwsh
-      run: ./buildscripts/evaluatetest.ps1
-
-    - name: Upload SQL Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: sql-artifacts-ubuntu-amd64
-        path: '*.sql'
-        retention-days: 5
-
-  test-ubuntu-arm64:
-    needs: [build, create-smoketest-db]
-    runs-on: ubuntu-24.04-arm
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin
-    
-    - name: Make Linux ARM64 binary executable
-      run: chmod +x bin/gitsqlite-linux-arm64
-    - name: Download smoketest database
-      uses: actions/download-artifact@v4
-      with:
-        name: smoketest-db
-        path: .
-    
-    - name: Run integrated smoketest on ARM64
-      run: |
-        echo "Step 1: Database -> SQL (clean)"
-        ./bin/gitsqlite-linux-arm64 clean < smoketest.db > smoketest_output1.sql
-        
-        echo "Step 2: SQL -> Database (smudge)"
-        ./bin/gitsqlite-linux-arm64 smudge < smoketest_output1.sql > smoketest_output2.db
-        
-        echo "Step 3: Database -> SQL (clean again)"
-        ./bin/gitsqlite-linux-arm64 clean < smoketest_output2.db > smoketest_output2.sql
-    - name: Evaluate test results
-      shell: pwsh
-      run: ./buildscripts/evaluatetest.ps1
-    - name: Upload SQL Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: sql-artifacts-ubuntu-arm64
-        path: '*.sql'
-        retention-days: 5
-  test-macos-arm64:
-    needs: [build, create-smoketest-db]
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin
-    - name: Make macOS binary executable
-      run: chmod +x bin/gitsqlite-macos-arm64
-    - name: Download smoketest database
-      uses: actions/download-artifact@v4
-      with:
-        name: smoketest-db
-        path: .
-    - name: Run integrated smoketest on macOS
-      run: |
-        echo "Step 1: Database -> SQL (clean)"
-        ./bin/gitsqlite-macos-arm64 clean < smoketest.db > smoketest_output1.sql
-        
-        echo "Step 2: SQL -> Database (smudge)"
-        ./bin/gitsqlite-macos-arm64 smudge < smoketest_output1.sql > smoketest_output2.db
-        
-        echo "Step 3: Database -> SQL (clean again)"
-        ./bin/gitsqlite-macos-arm64 clean < smoketest_output2.db > smoketest_output2.sql
-    - name: Evaluate test results
-      shell: pwsh
-      run: ./buildscripts/evaluatetest.ps1
-    - name: Upload SQL Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: sql-artifacts-macos-arm64
-        path: '*.sql'
-        retention-days: 5
+    test-ubuntu-arm64:
+      needs: [build, create-smoketest-db]
+      runs-on: ubuntu-24.04-arm
+      steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin
+      
+      - name: Make Linux ARM64 binary executable
+        run: chmod +x bin/gitsqlite-linux-arm64
+      - name: Download smoketest database
+        uses: actions/download-artifact@v4
+        with:
+          name: smoketest-db
+          path: .
+      
+      - name: Run integrated smoketest on ARM64
+        run: |
+          echo "Step 1: Database -> SQL (clean)"
+          ./bin/gitsqlite-linux-arm64 clean < smoketest.db > smoketest_output1.sql
+          
+          echo "Step 2: SQL -> Database (smudge)"
+          ./bin/gitsqlite-linux-arm64 smudge < smoketest_output1.sql > smoketest_output2.db
+          
+          echo "Step 3: Database -> SQL (clean again)"
+          ./bin/gitsqlite-linux-arm64 clean < smoketest_output2.db > smoketest_output2.sql
+      - name: Evaluate test results
+        shell: pwsh
+        run: ./buildscripts/evaluatetest.ps1
+      - name: Upload SQL Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-artifacts-ubuntu-arm64
+          path: '*.sql'
+          retention-days: 5
+    test-macos-arm64:
+      needs: [build, create-smoketest-db]
+      runs-on: macos-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin
+      - name: Make macOS binary executable
+        run: chmod +x bin/gitsqlite-macos-arm64
+      - name: Download smoketest database
+        uses: actions/download-artifact@v4
+        with:
+          name: smoketest-db
+          path: .
+      - name: Run integrated smoketest on macOS
+        run: |
+          echo "Step 1: Database -> SQL (clean)"
+          ./bin/gitsqlite-macos-arm64 clean < smoketest.db > smoketest_output1.sql
+          
+          echo "Step 2: SQL -> Database (smudge)"
+          ./bin/gitsqlite-macos-arm64 smudge < smoketest_output1.sql > smoketest_output2.db
+          
+          echo "Step 3: Database -> SQL (clean again)"
+          ./bin/gitsqlite-macos-arm64 clean < smoketest_output2.db > smoketest_output2.sql
+      - name: Evaluate test results
+        shell: pwsh
+        run: ./buildscripts/evaluatetest.ps1
+      - name: Upload SQL Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-artifacts-macos-arm64
+          path: '*.sql'
+          retention-days: 5
 
 
-  test-windows-amd64:
-    needs: [build, create-smoketest-db]
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin
-    - name: Install SQLite
-      run: choco install sqlite -y
-    - name: Download smoketest database
-      uses: actions/download-artifact@v4
-      with:
-        name: smoketest-db
-        path: .
-    - name: Run integrated smoketest on Windows
-      shell: cmd
-      run: |
-        REM Step 1: Database -> SQL (clean)
-        bin\gitsqlite-windows-amd64.exe clean < smoketest.db > smoketest_output1.sql
+    test-windows-amd64:
+      needs: [build, create-smoketest-db]
+      runs-on: windows-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin
+      - name: Install SQLite
+        run: choco install sqlite -y
+      - name: Download smoketest database
+        uses: actions/download-artifact@v4
+        with:
+          name: smoketest-db
+          path: .
+      - name: Run integrated smoketest on Windows
+        shell: cmd
+        run: |
+          REM Step 1: Database -> SQL (clean)
+          bin\gitsqlite-windows-amd64.exe clean < smoketest.db > smoketest_output1.sql
 
-        REM Step 2: SQL -> Database (smudge)
-        bin\gitsqlite-windows-amd64.exe smudge < smoketest_output1.sql > smoketest_output2.db
+          REM Step 2: SQL -> Database (smudge)
+          bin\gitsqlite-windows-amd64.exe smudge < smoketest_output1.sql > smoketest_output2.db
 
-        REM Step 3: Database -> SQL (clean again)
-        bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db > smoketest_output2.sql
-    - name: Evaluate test results
-      shell: pwsh
-      run: ./buildscripts/evaluatetest.ps1
-    - name: Upload SQL Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: sql-artifacts-windows-amd64
-        path: '*.sql'
-        retention-days: 5
+          REM Step 3: Database -> SQL (clean again)
+          bin\gitsqlite-windows-amd64.exe clean < smoketest_output2.db > smoketest_output2.sql
+      - name: Evaluate test results
+        shell: pwsh
+        run: ./buildscripts/evaluatetest.ps1
+      - name: Upload SQL Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-artifacts-windows-amd64
+          path: '*.sql'
+          retention-days: 5
 
-  test-schema-data-separation:
-    needs: [build, create-smoketest-db]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Download binaries
-      uses: actions/download-artifact@v4
-      with:
-        name: gitsqlite-binaries
-        path: bin
-    - name: Download smoketest database
-      uses: actions/download-artifact@v4
-      with:
-        name: smoketest-db
-        path: .
-    - name: Make Linux binary executable
-      run: chmod +x bin/gitsqlite-linux-amd64
-    - name: Test schema/data separation workflow
-      run: |
-        echo "=== Testing Schema/Data Separation Feature ==="
-        
-        echo "Step 1: Extract data-only + schema to separate files"
-        ./bin/gitsqlite-linux-amd64 -data-only -schema clean < smoketest.db > data_only.sql
-        
-        echo "Step 2: Verify schema file was created"
-        if [ ! -f .gitsqliteschema ]; then
-          echo "ERROR: Schema file .gitsqliteschema was not created"
-          exit 1
-        fi
-        
-        echo "Step 3: Verify data file contains only INSERT statements (and pragmas)"
-        if ! grep -q "INSERT INTO" data_only.sql; then
-          echo "ERROR: Data file missing INSERT statements"
-          exit 1
-        fi
-        if grep -q "CREATE TABLE" data_only.sql; then
-          echo "ERROR: Data file contains CREATE statements (should be data-only)"
-          exit 1
-        fi
-        
-        echo "Step 4: Verify schema file contains only CREATE statements (and pragmas)"
-        if ! grep -q "CREATE TABLE" .gitsqliteschema; then
-          echo "ERROR: Schema file missing CREATE statements"
-          exit 1
-        fi
-        if grep -q "INSERT INTO" .gitsqliteschema; then
-          echo "ERROR: Schema file contains INSERT statements (should be schema-only)"
-          exit 1
-        fi
-        
-        echo "Step 5: Restore database from separated files"
-        ./bin/gitsqlite-linux-amd64 -schema-file .gitsqliteschema smudge < data_only.sql > restored.db
-        
-        echo "Step 6: Verify roundtrip integrity"
-        ./bin/gitsqlite-linux-amd64 clean < restored.db > roundtrip.sql
-        ./bin/gitsqlite-linux-amd64 clean < smoketest.db > original.sql
-        
-        if ! diff original.sql roundtrip.sql; then
-          echo "ERROR: Roundtrip test failed - restored database differs from original"
-          exit 1
-        fi
-        
-        echo "Step 7: Test diff operation with schema/data separation"
-        ./bin/gitsqlite-linux-amd64 -data-only -schema-file schema_diff.sql diff smoketest.db > data_diff.sql
-        
-        if ! diff data_only.sql data_diff.sql; then
-          echo "ERROR: Clean and diff produce different data-only output"
-          exit 1
-        fi
-        
-        if ! diff .gitsqliteschema schema_diff.sql; then
-          echo "ERROR: Clean and diff produce different schema output"
-          exit 1
-        fi
-        
-        echo "=== Schema/Data Separation Tests: PASSED ==="
-        
-        echo "File sizes:"
-        echo "Original database: $(wc -c < smoketest.db) bytes"
-        echo "Full SQL: $(wc -c < original.sql) bytes" 
-        echo "Data-only SQL: $(wc -c < data_only.sql) bytes"
-        echo "Schema SQL: $(wc -c < .gitsqliteschema) bytes"
-        
-        echo "Line counts:"
-        echo "Full SQL: $(wc -l < original.sql) lines"
-        echo "Data-only SQL: $(wc -l < data_only.sql) lines"  
-        echo "Schema SQL: $(wc -l < .gitsqliteschema) lines"
-        
-    - name: Upload schema/data artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: schema-data-separation-artifacts
-        path: |
-          .gitsqliteschema
-          data_only.sql
-          schema_diff.sql
-          data_diff.sql
-          restored.db
-          roundtrip.sql
-          original.sql
-        retention-days: 5
+    test-schema-data-separation:
+      needs: [build, create-smoketest-db]
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: gitsqlite-binaries
+          path: bin
+      - name: Download smoketest database
+        uses: actions/download-artifact@v4
+        with:
+          name: smoketest-db
+          path: .
+      - name: Make Linux binary executable
+        run: chmod +x bin/gitsqlite-linux-amd64
+      - name: Test schema/data separation workflow
+        run: |
+          echo "=== Testing Schema/Data Separation Feature ==="
+          
+          echo "Step 1: Extract data-only + schema to separate files"
+          ./bin/gitsqlite-linux-amd64 -data-only -schema clean < smoketest.db > data_only.sql
+          
+          echo "Step 2: Verify schema file was created"
+          if [ ! -f .gitsqliteschema ]; then
+            echo "ERROR: Schema file .gitsqliteschema was not created"
+            exit 1
+          fi
+          
+          echo "Step 3: Verify data file contains only INSERT statements (and pragmas)"
+          if ! grep -q "INSERT INTO" data_only.sql; then
+            echo "ERROR: Data file missing INSERT statements"
+            exit 1
+          fi
+          if grep -q "CREATE TABLE" data_only.sql; then
+            echo "ERROR: Data file contains CREATE statements (should be data-only)"
+            exit 1
+          fi
+          
+          echo "Step 4: Verify schema file contains only CREATE statements (and pragmas)"
+          if ! grep -q "CREATE TABLE" .gitsqliteschema; then
+            echo "ERROR: Schema file missing CREATE statements"
+            exit 1
+          fi
+          if grep -q "INSERT INTO" .gitsqliteschema; then
+            echo "ERROR: Schema file contains INSERT statements (should be schema-only)"
+            exit 1
+          fi
+          
+          echo "Step 5: Restore database from separated files"
+          ./bin/gitsqlite-linux-amd64 -schema-file .gitsqliteschema smudge < data_only.sql > restored.db
+          
+          echo "Step 6: Verify roundtrip integrity"
+          ./bin/gitsqlite-linux-amd64 clean < restored.db > roundtrip.sql
+          ./bin/gitsqlite-linux-amd64 clean < smoketest.db > original.sql
+          
+          if ! diff original.sql roundtrip.sql; then
+            echo "ERROR: Roundtrip test failed - restored database differs from original"
+            exit 1
+          fi
+          
+          echo "Step 7: Test diff operation with schema/data separation"
+          ./bin/gitsqlite-linux-amd64 -data-only -schema-file schema_diff.sql diff smoketest.db > data_diff.sql
+          
+          if ! diff data_only.sql data_diff.sql; then
+            echo "ERROR: Clean and diff produce different data-only output"
+            exit 1
+          fi
+          
+          if ! diff .gitsqliteschema schema_diff.sql; then
+            echo "ERROR: Clean and diff produce different schema output"
+            exit 1
+          fi
+          
+          echo "=== Schema/Data Separation Tests: PASSED ==="
+          
+          echo "File sizes:"
+          echo "Original database: $(wc -c < smoketest.db) bytes"
+          echo "Full SQL: $(wc -c < original.sql) bytes" 
+          echo "Data-only SQL: $(wc -c < data_only.sql) bytes"
+          echo "Schema SQL: $(wc -c < .gitsqliteschema) bytes"
+          
+          echo "Line counts:"
+          echo "Full SQL: $(wc -l < original.sql) lines"
+          echo "Data-only SQL: $(wc -l < data_only.sql) lines"  
+          echo "Schema SQL: $(wc -l < .gitsqliteschema) lines"
+          
+      - name: Upload schema/data artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-data-separation-artifacts
+          path: |
+            .gitsqliteschema
+            data_only.sql
+            schema_diff.sql
+            data_diff.sql
+            restored.db
+            roundtrip.sql
+            original.sql
+          retention-days: 5
+    test-smudge-binary-integrity:
+      needs: [build, create-smoketest-db]
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - name: Download binaries
+          uses: actions/download-artifact@v4
+          with:
+            name: gitsqlite-binaries
+            path: bin
+        - name: Download smoketest database
+          uses: actions/download-artifact@v4
+          with:
+            name: smoketest-db
+            path: .
+        - name: Make Linux binary executable
+          run: chmod +x bin/gitsqlite-linux-amd64
+        - name: Run smudge filter and compare
+          run: |
+            ./bin/gitsqlite-linux-amd64 smudge < smoketest.db > smoketest_smudged.db
+            cmp --silent smoketest.db smoketest_smudged.db && echo "PASS: Files are binary identical" || (echo "FAIL: Files differ" && exit 1)
 
-  cross-evaluate:
-    needs: [test-ubuntu-amd64, test-windows-amd64]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Download Ubuntu SQL artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: sql-artifacts-ubuntu-amd64
-        path: ubuntu_sql
-    - name: Download Windows SQL artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: sql-artifacts-windows-amd64
-        path: windows_sql
-    - name: Run cross-platform evaluation
-      shell: pwsh
-      run: |
-        $ubuntuFile = (Get-ChildItem ubuntu_sql/*.sql | Select-Object -First 1).FullName
-        $windowsFile = (Get-ChildItem windows_sql/*.sql | Select-Object -First 1).FullName
-        
-        Write-Host "Comparing $ubuntuFile (Ubuntu) with $windowsFile (Windows)"
-        ./buildscripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
-    - name: Upload compared SQL files
-      uses: actions/upload-artifact@v4
-      with:
-        name: cross-evaluated-sql-files
-        path: |
-          ubuntu_sql/*.sql
-          windows_sql/*.sql
-        retention-days: 5
-    
+    cross-evaluate:
+      needs: [test-ubuntu-amd64, test-windows-amd64]
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Download Ubuntu SQL artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sql-artifacts-ubuntu-amd64
+          path: ubuntu_sql
+      - name: Download Windows SQL artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sql-artifacts-windows-amd64
+          path: windows_sql
+      - name: Run cross-platform evaluation
+        shell: pwsh
+        run: |
+          $ubuntuFile = (Get-ChildItem ubuntu_sql/*.sql | Select-Object -First 1).FullName
+          $windowsFile = (Get-ChildItem windows_sql/*.sql | Select-Object -First 1).FullName
+          
+          Write-Host "Comparing $ubuntuFile (Ubuntu) with $windowsFile (Windows)"
+          ./buildscripts/evaluatetest.ps1 -File1 $ubuntuFile -File2 $windowsFile
+      - name: Upload compared SQL files
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-evaluated-sql-files
+          path: |
+            ubuntu_sql/*.sql
+            windows_sql/*.sql
+          retention-days: 5
+      
