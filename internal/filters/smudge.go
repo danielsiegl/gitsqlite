@@ -1,6 +1,7 @@
 package filters
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,13 +13,62 @@ import (
 	"github.com/danielsiegl/gitsqlite/internal/sqlite"
 )
 
+// isSQLiteBinaryData checks if the input stream starts with SQLite binary header.
+// Returns true if SQLite binary, false if SQL text, and a new reader that preserves all data.
+func isSQLiteBinaryData(in io.Reader) (bool, io.Reader, error) {
+	// Read the first 16 bytes to check for SQLite header
+	header := make([]byte, 16)
+	n, err := io.ReadFull(in, header)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return false, nil, err
+	}
+	
+	// Check if we have enough bytes and if it matches SQLite header
+	expectedHeader := []byte("SQLite format 3\x00")
+	isSQLite := n >= len(expectedHeader) && bytes.Equal(header[:len(expectedHeader)], expectedHeader)
+	
+	// Create a new reader that includes the header we read plus the rest of the stream
+	var newReader io.Reader
+	if n > 0 {
+		newReader = io.MultiReader(bytes.NewReader(header[:n]), in)
+	} else {
+		newReader = in
+	}
+	
+	return isSQLite, newReader, nil
+}
+
 // Smudge reads SQL from 'in', restores into a temporary SQLite DB using the engine,
 // then streams the resulting DB bytes to 'out'.
 // If schemaFile is not empty and the file exists, schema is read from that file
 // and combined with data from 'in'.
+// If the input is already SQLite binary data, it's passed through unchanged.
 func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer, schemaFile string) error {
 	startTime := time.Now()
 	slog.Info("Starting smudge operation")
+
+	// First, check if the input is already SQLite binary data
+	isSQLite, newReader, err := isSQLiteBinaryData(in)
+	if err != nil {
+		slog.Error("Failed to detect input format", "error", err)
+		return err
+	}
+	
+	if isSQLite {
+		slog.Info("Detected SQLite binary input, passing through unchanged")
+		_, err := io.Copy(out, newReader)
+		if err != nil {
+			slog.Error("Failed to copy SQLite binary data", "error", err)
+			return err
+		}
+		totalDuration := time.Since(startTime)
+		slog.Info("Smudge passthrough completed", "totalDuration", logging.FormatDuration(totalDuration))
+		return nil
+	}
+	
+	// Input is SQL text, proceed with normal processing
+	slog.Info("Detected SQL text input, proceeding with restore operation")
+	in = newReader // Use the reader that preserves the header we read
 
 	tmp, err := os.CreateTemp("", "gitsqlite-*.db")
 	if err != nil {
