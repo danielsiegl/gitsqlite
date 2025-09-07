@@ -339,7 +339,7 @@
             roundtrip.sql
             original.sql
           retention-days: 5
-    test-smudge-binary-integrity:
+    test-smudge-binary-error:
       needs: [build, create-smoketest-db]
       runs-on: ubuntu-latest
       steps:
@@ -356,10 +356,21 @@
             path: .
         - name: Make Linux binary executable
           run: chmod +x bin/gitsqlite-linux-amd64
-        - name: Run smudge filter and compare
+        - name: Test smudge filter rejects SQLite binary data
           run: |
-            ./bin/gitsqlite-linux-amd64 smudge < smoketest.db > smoketest_smudged.db
-            cmp --silent smoketest.db smoketest_smudged.db && echo "PASS: Files are binary identical" || (echo "FAIL: Files differ" && exit 1)
+            # Expect the smudge operation to fail with exit code 3 when given SQLite binary data
+            if ./bin/gitsqlite-linux-amd64 smudge < smoketest.db > smoketest_smudged.db 2>/dev/null; then
+              echo "FAIL: Smudge filter should have failed when given SQLite binary data"
+              exit 1
+            else
+              exit_code=$?
+              if [ $exit_code -eq 3 ]; then
+                echo "PASS: Smudge filter correctly rejected SQLite binary data with exit code 3"
+              else
+                echo "FAIL: Expected exit code 3, but got $exit_code"
+                exit 1
+              fi
+            fi
 
     cross-evaluate:
       needs: [test-ubuntu-amd64, test-windows-amd64]

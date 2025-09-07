@@ -55,15 +55,8 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 	}
 
 	if isSQLite {
-		slog.Info("Detected SQLite binary input, passing through unchanged")
-		_, err := io.Copy(out, newReader)
-		if err != nil {
-			slog.Error("Failed to copy SQLite binary data", "error", err)
-			return err
-		}
-		totalDuration := time.Since(startTime)
-		slog.Info("Smudge passthrough completed", "totalDuration", logging.FormatDuration(totalDuration))
-		return nil
+		slog.Error("SQLite binary data detected in smudge operation", "message", "smudge filter expects SQL text input, not SQLite binary data")
+		return fmt.Errorf("smudge filter received SQLite binary data instead of expected SQL text input")
 	}
 
 	// Input is SQL text, proceed with normal processing
