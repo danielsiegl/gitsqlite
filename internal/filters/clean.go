@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/danielsiegl/gitsqlite/internal/hash"
 	"github.com/danielsiegl/gitsqlite/internal/logging"
 	"github.com/danielsiegl/gitsqlite/internal/sqlite"
 )
@@ -59,26 +60,46 @@ func Clean(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer,
 		}
 		defer schemaFile.Close()
 
-		if err := DumpSchema(dumpCtx, eng, tmp.Name(), schemaFile); err != nil {
+		// Wrap schema output with hash writer
+		schemaHashWriter := hash.NewHashWriter(schemaFile)
+
+		if err := DumpSchema(dumpCtx, eng, tmp.Name(), schemaHashWriter); err != nil {
 			slog.Error("Schema dump failed", "error", err)
 			return err
 		}
-		slog.Info("Schema saved to file", "file", schemaOutput)
+
+		// Append hash to schema file
+		if _, err := schemaFile.WriteString(schemaHashWriter.GetHashComment()); err != nil {
+			slog.Error("Failed to write schema hash", "error", err)
+			return err
+		}
+
+		slog.Info("Schema saved to file with hash", "file", schemaOutput)
 	}
 
 	// Use the new selective dumping method that excludes sqlite_sequence natively
 	// This now uses the logical filtering function from the filters package
 	// When schema is saved to a separate file, only output data to stdout
 	outputDataOnly := dataOnly || (schemaOutput != "")
-	if err := DumpTables(dumpCtx, eng, tmp.Name(), out, floatPrecision, outputDataOnly); err != nil {
+
+	// Wrap output with hash writer to compute hash of SQL content
+	hashWriter := hash.NewHashWriter(out)
+
+	if err := DumpTables(dumpCtx, eng, tmp.Name(), hashWriter, floatPrecision, outputDataOnly); err != nil {
 		slog.Error("SQLite selective dump failed", "error", err)
+		return err
+	}
+
+	// Append hash comment to output
+	if _, err := out.Write([]byte(hashWriter.GetHashComment())); err != nil {
+		slog.Error("Failed to write hash comment", "error", err)
 		return err
 	}
 
 	dumpDuration := time.Since(dumpStart)
 	totalDuration := time.Since(startTime)
 
-	slog.Info("Clean operation completed",
+	slog.Info("Clean operation completed with hash",
 		"totalDuration", logging.FormatDuration(totalDuration),
 		"copyDuration", logging.FormatDuration(copyDuration),
 		"dumpDuration", logging.FormatDuration(dumpDuration))
