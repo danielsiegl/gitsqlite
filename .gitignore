@@ -10,3 +10,4 @@ test-logs/
 /.obsidian/core-plugins.json
 /.obsidian/appearance.json
 /.claude-allow
+/.gitsqliteschema
