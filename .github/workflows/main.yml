@@ -347,6 +347,102 @@ jobs:
           original.sql
         retention-days: 5
 
+  test-hash-validation:
+    needs: [build, create-smoketest-db]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
+    - name: Make Linux binary executable
+      run: chmod +x bin/gitsqlite-linux-amd64
+    - name: Test hash validation in smudge operation
+      run: |
+        echo "=== Testing Hash Validation in Smudge Operation ==="
+
+        # First, create a valid SQL file with hash
+        echo "Step 1: Create valid SQL file with hash"
+        ./bin/gitsqlite-linux-amd64 clean < smoketest.db > valid.sql
+        ORIGINAL_HASH=$(tail -1 valid.sql)
+        echo "Original hash: $ORIGINAL_HASH"
+
+        # Test 1: Verify valid file works
+        echo ""
+        echo "Test 1: Verify smudge works with valid hash"
+        if ! ./bin/gitsqlite-linux-amd64 smudge < valid.sql > restored_valid.db 2>&1; then
+          echo "ERROR: Smudge failed with valid hash"
+          exit 1
+        fi
+        echo "✓ Smudge succeeded with valid hash"
+
+        # Test 2: Corrupted hash (invalid hash value)
+        echo ""
+        echo "Test 2: Smudge should fail with corrupted/invalid hash"
+        cat > corrupted_hash.sql << 'EOF'
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT);
+        INSERT INTO test VALUES(1,'Alice');
+        COMMIT;
+        -- gitsqlite-hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        EOF
+
+        if ./bin/gitsqlite-linux-amd64 smudge < corrupted_hash.sql > output.db 2>&1; then
+          echo "ERROR: Smudge should have failed with invalid hash but succeeded"
+          exit 1
+        fi
+        echo "✓ Smudge correctly failed with invalid hash"
+
+        # Test 3: Modified content (hash doesn't match modified content)
+        echo ""
+        echo "Test 3: Smudge should fail when content is modified but hash is not updated"
+        cp valid.sql modified_content.sql
+        # Insert a malicious line before COMMIT but keep the original hash
+        sed -i '/COMMIT;/i INSERT INTO test VALUES(999,'"'"'Hacker'"'"');' modified_content.sql
+
+        if ./bin/gitsqlite-linux-amd64 smudge < modified_content.sql > output2.db 2>&1; then
+          echo "ERROR: Smudge should have failed with modified content but succeeded"
+          exit 1
+        fi
+        echo "✓ Smudge correctly failed with modified content"
+
+        # Test 4: Schema file hash validation
+        echo ""
+        echo "Test 4: Smudge should fail when schema file hash is invalid"
+        ./bin/gitsqlite-linux-amd64 -data-only -schema clean < smoketest.db > data_only.sql
+
+        # Corrupt the schema file by modifying content but keeping hash
+        cp .gitsqliteschema corrupted_schema.sql
+        sed -i 's/TEXT NOT NULL/TEXT/' corrupted_schema.sql
+
+        if ./bin/gitsqlite-linux-amd64 -schema-file corrupted_schema.sql smudge < data_only.sql > output3.db 2>&1; then
+          echo "ERROR: Smudge should have failed with corrupted schema file but succeeded"
+          exit 1
+        fi
+        echo "✓ Smudge correctly failed with corrupted schema file"
+
+        # Test 5: Missing hash line
+        echo ""
+        echo "Test 5: Smudge should fail when hash line is missing"
+        head -n -1 valid.sql > missing_hash.sql
+
+        if ./bin/gitsqlite-linux-amd64 smudge < missing_hash.sql > output4.db 2>&1; then
+          echo "ERROR: Smudge should have failed with missing hash but succeeded"
+          exit 1
+        fi
+        echo "✓ Smudge correctly failed with missing hash"
+
+        echo ""
+        echo "=== Hash Validation Tests: ALL PASSED ==="
+
   cross-evaluate:
     needs: [test-ubuntu-amd64, test-windows-amd64]
     runs-on: ubuntu-latest
