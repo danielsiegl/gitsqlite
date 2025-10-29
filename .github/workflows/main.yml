@@ -303,13 +303,19 @@ jobs:
         
         echo "Step 7: Test diff operation with schema/data separation"
         ./bin/gitsqlite-linux-amd64 -data-only -schema-file schema_diff.sql diff smoketest.db > data_diff.sql
-        
-        if ! diff data_only.sql data_diff.sql; then
+
+        # Note: We need to strip hash lines before comparing because:
+        # - 'clean' operation adds hash signatures (-- gitsqlite-hash: sha256:...) for Git filter integrity verification
+        # - 'diff' operation does NOT add hash signatures (they're unnecessary for viewing/comparing changes)
+        # This is intentional behavior, not a bug. We compare the SQL content while ignoring the hash metadata.
+        echo "Comparing data-only outputs (ignoring hash lines)..."
+        if ! diff <(grep -v "^-- gitsqlite-hash:" data_only.sql) <(grep -v "^-- gitsqlite-hash:" data_diff.sql); then
           echo "ERROR: Clean and diff produce different data-only output"
           exit 1
         fi
-        
-        if ! diff .gitsqliteschema schema_diff.sql; then
+
+        echo "Comparing schema outputs (ignoring hash lines)..."
+        if ! diff <(grep -v "^-- gitsqlite-hash:" .gitsqliteschema) <(grep -v "^-- gitsqlite-hash:" schema_diff.sql); then
           echo "ERROR: Clean and diff produce different schema output"
           exit 1
         fi
