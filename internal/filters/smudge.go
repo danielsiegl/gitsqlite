@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/danielsiegl/gitsqlite/internal/hash"
 	"github.com/danielsiegl/gitsqlite/internal/logging"
 	"github.com/danielsiegl/gitsqlite/internal/sqlite"
 )
@@ -31,12 +32,20 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 
 	restoreStart := time.Now()
 
+	// Verify hash from stdin data and strip it
+	verifiedDataReader, err := hash.VerifyAndStripHash(in)
+	if err != nil {
+		slog.Error("Hash verification failed for data", "error", err)
+		return fmt.Errorf("data hash verification failed: %w", err)
+	}
+	slog.Info("Data hash verified successfully")
+
 	// If schema file is specified and exists, combine schema + data
 	if schemaFile != "" {
 		if _, err := os.Stat(schemaFile); err == nil {
 			slog.Info("Combining schema from file with data from stdin", "schemaFile", schemaFile)
 
-			// Create a combined reader: schema first, then data
+			// Open and verify schema file
 			schemaFileReader, err := os.Open(schemaFile)
 			if err != nil {
 				slog.Error("Failed to open schema file", "file", schemaFile, "error", err)
@@ -44,8 +53,16 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 			}
 			defer schemaFileReader.Close()
 
-			// Combine schema and data streams
-			combinedReader := io.MultiReader(schemaFileReader, in)
+			// Verify hash from schema file and strip it
+			verifiedSchemaReader, err := hash.VerifyAndStripHash(schemaFileReader)
+			if err != nil {
+				slog.Error("Hash verification failed for schema file", "file", schemaFile, "error", err)
+				return fmt.Errorf("schema hash verification failed: %w", err)
+			}
+			slog.Info("Schema hash verified successfully", "file", schemaFile)
+
+			// Combine verified schema and data streams
+			combinedReader := io.MultiReader(verifiedSchemaReader, verifiedDataReader)
 
 			if err := eng.Restore(ctx, tmpPath, combinedReader); err != nil {
 				slog.Error("SQLite restore with schema file failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
@@ -56,8 +73,8 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 			return fmt.Errorf("schema file not found: %s", schemaFile)
 		}
 	} else {
-		// Normal restore without schema file
-		if err := eng.Restore(ctx, tmpPath, in); err != nil {
+		// Normal restore without schema file - use verified data
+		if err := eng.Restore(ctx, tmpPath, verifiedDataReader); err != nil {
 			slog.Error("SQLite restore failed", "error", err, "duration", logging.FormatDuration(time.Since(restoreStart)))
 			return err
 		}
