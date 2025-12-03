@@ -56,7 +56,7 @@ func showVersionInfo(sqliteCmd string, logger *slog.Logger, cleanup func()) {
 		logger.Error("failed to get executable path", "error", err)
 		cleanup() // Ensure log is flushed before exit
 		fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
-		os.Exit(1)
+		os.Exit(3)
 	}
 	logger.Info("checking sqlite availability", "sqlite_cmd", sqliteCmd)
 	fmt.Printf("Checking SQLite availability...\n")
@@ -69,7 +69,7 @@ func showVersionInfo(sqliteCmd string, logger *slog.Logger, cleanup func()) {
 		cleanup() // Ensure log is flushed before exit
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Please ensure SQLite is installed or provide the correct path using -sqlite flag\n")
-		os.Exit(2)
+		os.Exit(4)
 
 	}
 	fmt.Printf("SQLite found at: %s\n", sqlitePath)
@@ -93,7 +93,7 @@ func validateOperation(logger *slog.Logger, cleanup func()) string {
 		fmt.Fprintf(os.Stderr, "Error: Unknown operation '%s'\n", op)
 		fmt.Fprintf(os.Stderr, "Supported operations: clean, smudge, diff\n")
 		fmt.Fprintf(os.Stderr, "Use -help for more information\n")
-		os.Exit(1)
+		os.Exit(8)
 	}
 	return op
 }
