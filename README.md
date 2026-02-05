@@ -37,10 +37,16 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
    ```
    ```bash
    # Linux (Debian/Ubuntu - Recommended)
-   # Download the latest version (replace VERSION with actual version like v0.8.0)
-   VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+   # Download the latest version
+   # Option 1: Using sed (more portable)
+   VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | sed -n 's/.*"tag_name": "\([^"]*\)".*/\1/p')
    curl -L -o gitsqlite.deb "https://github.com/danielsiegl/gitsqlite/releases/download/${VERSION}/gitsqlite_${VERSION#v}_amd64.deb"
    sudo dpkg -i gitsqlite.deb
+   
+   # Option 2: Using jq (if available - more reliable)
+   # VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | jq -r .tag_name)
+   # curl -L -o gitsqlite.deb "https://github.com/danielsiegl/gitsqlite/releases/download/${VERSION}/gitsqlite_${VERSION#v}_amd64.deb"
+   # sudo dpkg -i gitsqlite.deb
    ```
    ```bash
    # Linux (Other) / macOS
@@ -158,12 +164,12 @@ Sample Repo: https://github.com/danielsiegl/gitsqliteDiffFilterDemo
   ```bash
   # Option 1: Install Debian package (Recommended for Debian/Ubuntu)
   # AMD64 (Intel/AMD 64-bit)
-  VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+  VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | sed -n 's/.*"tag_name": "\([^"]*\)".*/\1/p')
   curl -L -o gitsqlite.deb "https://github.com/danielsiegl/gitsqlite/releases/download/${VERSION}/gitsqlite_${VERSION#v}_amd64.deb"
   sudo dpkg -i gitsqlite.deb
   
   # ARM64 (ARM servers)
-  # VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+  # VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | sed -n 's/.*"tag_name": "\([^"]*\)".*/\1/p')
   # curl -L -o gitsqlite.deb "https://github.com/danielsiegl/gitsqlite/releases/download/${VERSION}/gitsqlite_${VERSION#v}_arm64.deb"
   # sudo dpkg -i gitsqlite.deb
   
