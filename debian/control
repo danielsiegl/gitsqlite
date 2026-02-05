@@ -1,0 +1,23 @@
+Source: gitsqlite
+Section: vcs
+Priority: optional
+Maintainer: Daniel Siegl <daniel@siegl.dev>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.1.2
+Homepage: https://github.com/danielsiegl/gitsqlite
+
+Package: gitsqlite
+Architecture: any
+Depends: sqlite3
+Description: Git clean/smudge/diff filter for SQLite databases
+ gitsqlite is a Git clean/smudge/diff filter for storing SQLite databases
+ in plain text SQL, enabling meaningful diffs and merges.
+ .
+ Features:
+  - Byte-by-byte identical dumps across Windows/Linux/macOS
+  - Consistent float rounding (deterministic dumps)
+  - Strips SQLite's internal/system tables from dumps
+  - Temp-file I/O for robustness
+  - Handles broken pipes with Git GUI Clients
+  - Optional logging for diagnostics
+  - Schema/data separation for cleaner diffs

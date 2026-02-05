@@ -36,13 +36,18 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
    winget install danielsiegl.gitsqlite
    ```
    ```bash
-   # Linux/macOS  
+   # Linux (Debian/Ubuntu - Recommended)
+   curl -L -o gitsqlite.deb https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite_*_amd64.deb
+   sudo dpkg -i gitsqlite.deb
+   ```
+   ```bash
+   # Linux (Other) / macOS
    curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
    chmod +x gitsqlite && sudo mv gitsqlite /usr/local/bin/
    ```
 
 2. **Ensure SQLite 3 is installed** (required dependency):
-   (Not required when installed via winget.)
+   (Not required when installed via winget or Debian package.)
    ```bash
    # Windows
    winget install SQLite.SQLite
@@ -149,6 +154,15 @@ Sample Repo: https://github.com/danielsiegl/gitsqliteDiffFilterDemo
 
 - **Linux**:  
   ```bash
+  # Option 1: Install Debian package (Recommended for Debian/Ubuntu)
+  # AMD64 (Intel/AMD 64-bit)
+  curl -L -o gitsqlite.deb https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite_*_amd64.deb
+  sudo dpkg -i gitsqlite.deb
+  # ARM64 (ARM servers)
+  # curl -L -o gitsqlite.deb https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite_*_arm64.deb
+  # sudo dpkg -i gitsqlite.deb
+  
+  # Option 2: Direct binary download
   # AMD64 (Intel/AMD 64-bit) - using curl
   curl -L -o gitsqlite https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite-linux-amd64
   # ARM64 (ARM servers) - using curl
