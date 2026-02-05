@@ -150,6 +150,7 @@ jobs:
             chmod 755 "${PKG_DIR}/usr/bin/gitsqlite"
             
             # Create DEBIAN/control file
+            # NOTE: Keep this content in sync with ARM64 package, main.yml workflow, and debian/control
             cat > "${PKG_DIR}/DEBIAN/control" << EOF
             Package: gitsqlite
             Version: ${VERSION_CLEAN}
@@ -201,6 +202,7 @@ jobs:
             chmod 755 "${PKG_DIR}/usr/bin/gitsqlite"
             
             # Create DEBIAN/control file
+            # NOTE: Keep this content in sync with AMD64 package, main.yml workflow, and debian/control
             cat > "${PKG_DIR}/DEBIAN/control" << EOF
             Package: gitsqlite
             Version: ${VERSION_CLEAN}

@@ -37,7 +37,9 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
    ```
    ```bash
    # Linux (Debian/Ubuntu - Recommended)
-   curl -L -o gitsqlite.deb https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite_*_amd64.deb
+   # Download the latest version (replace VERSION with actual version like v0.8.0)
+   VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+   curl -L -o gitsqlite.deb "https://github.com/danielsiegl/gitsqlite/releases/download/${VERSION}/gitsqlite_${VERSION#v}_amd64.deb"
    sudo dpkg -i gitsqlite.deb
    ```
    ```bash
@@ -156,10 +158,13 @@ Sample Repo: https://github.com/danielsiegl/gitsqliteDiffFilterDemo
   ```bash
   # Option 1: Install Debian package (Recommended for Debian/Ubuntu)
   # AMD64 (Intel/AMD 64-bit)
-  curl -L -o gitsqlite.deb https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite_*_amd64.deb
+  VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+  curl -L -o gitsqlite.deb "https://github.com/danielsiegl/gitsqlite/releases/download/${VERSION}/gitsqlite_${VERSION#v}_amd64.deb"
   sudo dpkg -i gitsqlite.deb
+  
   # ARM64 (ARM servers)
-  # curl -L -o gitsqlite.deb https://github.com/danielsiegl/gitsqlite/releases/latest/download/gitsqlite_*_arm64.deb
+  # VERSION=$(curl -s https://api.github.com/repos/danielsiegl/gitsqlite/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+  # curl -L -o gitsqlite.deb "https://github.com/danielsiegl/gitsqlite/releases/download/${VERSION}/gitsqlite_${VERSION#v}_arm64.deb"
   # sudo dpkg -i gitsqlite.deb
   
   # Option 2: Direct binary download
