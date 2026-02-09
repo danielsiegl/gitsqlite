@@ -17,7 +17,9 @@ import (
 // then streams the resulting DB bytes to 'out'.
 // If schemaFile is not empty and the file exists, schema is read from that file
 // and combined with data from 'in'.
-func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer, schemaFile string) error {
+// If enforceHash is true, hash verification failures cause the operation to fail.
+// If enforceHash is false, hash verification status is logged but operation continues.
+func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer, schemaFile string, enforceHash bool) error {
 	startTime := time.Now()
 	slog.Info("Starting smudge operation")
 
@@ -32,13 +34,31 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 
 	restoreStart := time.Now()
 
+	var verifiedDataReader io.Reader
+
 	// Verify hash from stdin data and strip it
-	verifiedDataReader, err := hash.VerifyAndStripHash(in)
-	if err != nil {
-		slog.Error("Hash verification failed for data", "error", err)
-		return fmt.Errorf("data hash verification failed: %w", err)
+	if enforceHash {
+		// Strict verification - fail on invalid/missing hash
+		var err error
+		verifiedDataReader, err = hash.VerifyAndStripHash(in)
+		if err != nil {
+			slog.Error("Hash verification failed for data (enforce mode)", "error", err)
+			return fmt.Errorf("data hash verification failed: %w", err)
+		}
+		slog.Info("Data hash verified successfully (enforce mode)")
+	} else {
+		// Optional verification - log status but continue
+		var result *hash.VerificationResult
+		verifiedDataReader, result = hash.VerifyHashOptional(in)
+		if result.Valid {
+			slog.Info("Data hash verification successful", "message", result.Message)
+		} else {
+			slog.Warn("Data hash verification failed (non-enforce mode)",
+				"valid", result.Valid,
+				"error", result.Error,
+				"message", result.Message)
+		}
 	}
-	slog.Info("Data hash verified successfully")
 
 	// If schema file is specified and exists, combine schema + data
 	if schemaFile != "" {
@@ -53,13 +73,32 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 			}
 			defer schemaFileReader.Close()
 
+			var verifiedSchemaReader io.Reader
+
 			// Verify hash from schema file and strip it
-			verifiedSchemaReader, err := hash.VerifyAndStripHash(schemaFileReader)
-			if err != nil {
-				slog.Error("Hash verification failed for schema file", "file", schemaFile, "error", err)
-				return fmt.Errorf("schema hash verification failed: %w", err)
+			if enforceHash {
+				// Strict verification - fail on invalid/missing hash
+				var err error
+				verifiedSchemaReader, err = hash.VerifyAndStripHash(schemaFileReader)
+				if err != nil {
+					slog.Error("Hash verification failed for schema file (enforce mode)", "file", schemaFile, "error", err)
+					return fmt.Errorf("schema hash verification failed: %w", err)
+				}
+				slog.Info("Schema hash verified successfully (enforce mode)", "file", schemaFile)
+			} else {
+				// Optional verification - log status but continue
+				var result *hash.VerificationResult
+				verifiedSchemaReader, result = hash.VerifyHashOptional(schemaFileReader)
+				if result.Valid {
+					slog.Info("Schema hash verification successful", "file", schemaFile, "message", result.Message)
+				} else {
+					slog.Warn("Schema hash verification failed (non-enforce mode)",
+						"file", schemaFile,
+						"valid", result.Valid,
+						"error", result.Error,
+						"message", result.Message)
+				}
 			}
-			slog.Info("Schema hash verified successfully", "file", schemaFile)
 
 			// Combine verified schema and data streams
 			combinedReader := io.MultiReader(verifiedSchemaReader, verifiedDataReader)

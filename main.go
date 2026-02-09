@@ -99,11 +99,11 @@ func validateOperation(logger *slog.Logger, cleanup func()) string {
 }
 
 // executeOperation runs the specified operation with the given engine
-func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, floatPrecision int, dataOnly bool, schemaFilename string, logger *slog.Logger, cleanup func()) {
+func executeOperation(ctx context.Context, op string, engine *sqlite.Engine, floatPrecision int, dataOnly bool, schemaFilename string, verifyHash bool, logger *slog.Logger, cleanup func()) {
 	switch op {
 	case "smudge":
 		logger.Info("starting smudge")
-		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout, schemaFilename); err != nil {
+		if err := filters.Smudge(ctx, engine, os.Stdin, os.Stdout, schemaFilename, verifyHash); err != nil {
 			logger.Error("smudge failed", slog.Any("error", err))
 			cleanup() // Ensure log is flushed before exit
 			fmt.Fprintf(os.Stderr, "Error running SQLite command for smudge operation: %v\n", err)
@@ -150,6 +150,7 @@ func main() {
 		dataOnly       = flag.Bool("data-only", false, "For clean/diff: output only data (INSERT statements), no schema")
 		schema         = flag.Bool("schema", false, "Use .gitsqliteschema for schema/data separation (works with all operations)")
 		schemaFile     = flag.String("schema-file", "", "Use specified file for schema/data separation (works with all operations)")
+		verifyHash     = flag.Bool("verify-hash", false, "Enforce hash verification on smudge (fails if hash is invalid/missing; without this flag, validation status is logged only)")
 	)
 	flag.Usage = usage
 	flag.Parse()
@@ -207,7 +208,7 @@ func main() {
 		schemaFilename = ".gitsqliteschema"
 	}
 
-	executeOperation(ctx, op, engine, *floatPrecision, *dataOnly, schemaFilename, logger, cleanup)
+	executeOperation(ctx, op, engine, *floatPrecision, *dataOnly, schemaFilename, *verifyHash, logger, cleanup)
 
 	logger.Info("gitsqlite finished successfully", "operation", op)
 }
