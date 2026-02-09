@@ -23,8 +23,7 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
 - Consistent float rounding (deterministic dumps).
 - Strip SQLite’s internal/system tables from dumps.
 - Temp-file I/O for robustness (vs fragile pipes).
-- handles broken pipes with Git Gui Clients
-- easier to deploy and maintain in an organization - eg: winget for windows
+- handles broken pipes with Git Gui Clients- SHA-256 hash validation for data integrity verification- easier to deploy and maintain in an organization - eg: winget for windows
 - Optional: logging for diagnostics
 
 ## Quick Start
@@ -281,6 +280,15 @@ See [CLI Parameters](#cli-parameters) for all available options.
   gitsqlite -schema-file schema.sql diff database.db > data.sql
   ```
 
+**`-verify-hash`** - Enforce hash verification on smudge (fails if hash is invalid/missing; without this flag, validation status is logged only)
+  ```bash
+  # With enforcement - fails if hash is missing or invalid
+  gitsqlite -verify-hash smudge < database.sql > database.db
+  
+  # Without enforcement (default) - logs warnings but continues
+  gitsqlite smudge < database.sql > database.db
+  ```
+
 ## Examples
 
 ### Quick Start Example
@@ -399,6 +407,77 @@ gitsqlite -log smudge < test.sql > test-restored.db
 gitsqlite clean < test.db | gitsqlite smudge > restored.db
 sqlite3 restored.db "SELECT COUNT(*) FROM sqlite_master;"
 ```
+
+## Hash Validation & Data Integrity
+
+gitsqlite automatically adds SHA-256 hash signatures to SQL files during `clean` operations to ensure data integrity. These hashes protect against accidental file corruption or unauthorized modifications.
+
+### How It Works
+
+1. **During clean (DB → SQL)**: A SHA-256 hash is computed from the SQL content and appended as a comment:
+   ```sql
+   PRAGMA foreign_keys=OFF;
+   BEGIN TRANSACTION;
+   CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);
+   INSERT INTO users VALUES(1,'Alice');
+   COMMIT;
+   -- gitsqlite-hash: sha256:a1b2c3d4e5f6...
+   ```
+
+2. **During smudge (SQL → DB)**: The hash is verified before reconstruction:
+   - **Default behavior** (without `-verify-hash`): Hash is validated and warnings are logged if invalid/missing, but operation continues
+   - **With `-verify-hash` flag**: Operation fails if hash is invalid or missing
+
+### Enforcement Modes
+
+**Optional validation (default)**:
+```bash
+# Validates hash and logs warnings, but continues even if hash is invalid/missing
+gitsqlite smudge < database.sql > database.db
+
+# To see validation warnings, enable logging:
+gitsqlite -log smudge < database.sql > database.db
+# Check the log file for hash validation status
+```
+
+**Enforced validation** (recommended for production):
+```bash
+# Fails immediately if hash is invalid or missing
+gitsqlite -verify-hash smudge < database.sql > database.db
+```
+
+### Git Configuration for Enforced Validation
+
+To enforce hash validation in your Git workflow:
+
+```bash
+# Configure Git to use enforced validation
+git config filter.gitsqlite.smudge "gitsqlite -verify-hash smudge"
+git config filter.gitsqlite.clean "gitsqlite clean"
+```
+
+### When to Use Each Mode
+
+- **Default (optional)**: For development and testing environments where flexibility is needed
+- **Enforced (`-verify-hash`)**: For production environments or when working with critical data
+
+### Hash Validation Status
+
+During smudge operations, hash validation can have three outcomes:
+
+1. **Valid**: Hash matches content - operation proceeds normally
+2. **Invalid**: Hash doesn't match content (file modified) - warning logged or operation fails (if `-verify-hash`)
+3. **Missing**: No hash signature found - warning logged or operation fails (if `-verify-hash`)
+
+### Security Considerations
+
+- Hash validation detects **accidental corruption** and **unauthorized modifications**
+- Hashes are computed on the SQL content (excluding the hash line itself)
+- SHA-256 provides cryptographic-strength verification
+- Both data files and schema files (when using `-schema`) are independently hashed
+
+**Note**: While hash validation protects data integrity, it should be combined with proper Git security practices (signed commits, protected branches, etc.) for complete security.
+
 
 ## Logging
 
