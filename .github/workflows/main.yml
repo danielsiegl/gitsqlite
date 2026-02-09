@@ -18,7 +18,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.24'
+        go-version: '1.25'
         cache: false
     - name: Check gofmt compliance
       shell: bash
@@ -30,6 +30,111 @@ jobs:
         fi
     - name: Build
       run: ./buildscripts/build.ps1
+    
+    - name: Create Debian Package for Linux AMD64
+      shell: bash
+      run: |
+        echo "Creating Debian package for Linux AMD64..."
+        
+        # Install dpkg-deb if not available
+        sudo apt-get update && sudo apt-get install -y dpkg-dev
+        
+        # Use a test version for non-release builds
+        VERSION="0.0.0-dev+$(git rev-parse --short HEAD)"
+        
+        # Create package directory structure
+        PKG_DIR="gitsqlite_${VERSION}_amd64"
+        mkdir -p "${PKG_DIR}/DEBIAN"
+        mkdir -p "${PKG_DIR}/usr/bin"
+        
+        # Copy binary
+        cp bin/gitsqlite-linux-amd64 "${PKG_DIR}/usr/bin/gitsqlite"
+        chmod 755 "${PKG_DIR}/usr/bin/gitsqlite"
+        
+        # Create DEBIAN/control file
+        # NOTE: Keep this content in sync with ARM64 package, release.yml workflow, and debian/control
+        cat > "${PKG_DIR}/DEBIAN/control" << EOF
+        Package: gitsqlite
+        Version: ${VERSION}
+        Section: vcs
+        Priority: optional
+        Architecture: amd64
+        Depends: sqlite3
+        Maintainer: Daniel Siegl <daniel@siegl.dev>
+        Description: Git clean/smudge/diff filter for SQLite databases
+         gitsqlite is a Git clean/smudge/diff filter for storing SQLite databases
+         in plain text SQL, enabling meaningful diffs and merges.
+         .
+         Features:
+          - Byte-by-byte identical dumps across Windows/Linux/macOS
+          - Consistent float rounding (deterministic dumps)
+          - Strips SQLite's internal/system tables from dumps
+          - Temp-file I/O for robustness
+          - Handles broken pipes with Git GUI Clients
+          - Optional logging for diagnostics
+          - Schema/data separation for cleaner diffs
+        Homepage: https://github.com/danielsiegl/gitsqlite
+        EOF
+        
+        # Build the package
+        dpkg-deb --build "${PKG_DIR}"
+        
+        # Move to bin directory for upload
+        mv "${PKG_DIR}.deb" "bin/gitsqlite_${VERSION}_amd64.deb"
+        
+        echo "✓ Debian package created: bin/gitsqlite_${VERSION}_amd64.deb"
+        ls -lh "bin/gitsqlite_${VERSION}_amd64.deb"
+
+    - name: Create Debian Package for Linux ARM64
+      shell: bash
+      run: |
+        echo "Creating Debian package for Linux ARM64..."
+        
+        # Use a test version for non-release builds
+        VERSION="0.0.0-dev+$(git rev-parse --short HEAD)"
+        
+        # Create package directory structure
+        PKG_DIR="gitsqlite_${VERSION}_arm64"
+        mkdir -p "${PKG_DIR}/DEBIAN"
+        mkdir -p "${PKG_DIR}/usr/bin"
+        
+        # Copy binary
+        cp bin/gitsqlite-linux-arm64 "${PKG_DIR}/usr/bin/gitsqlite"
+        chmod 755 "${PKG_DIR}/usr/bin/gitsqlite"
+        
+        # Create DEBIAN/control file
+        # NOTE: Keep this content in sync with AMD64 package, release.yml workflow, and debian/control
+        cat > "${PKG_DIR}/DEBIAN/control" << EOF
+        Package: gitsqlite
+        Version: ${VERSION}
+        Section: vcs
+        Priority: optional
+        Architecture: arm64
+        Depends: sqlite3
+        Maintainer: Daniel Siegl <daniel@siegl.dev>
+        Description: Git clean/smudge/diff filter for SQLite databases
+         gitsqlite is a Git clean/smudge/diff filter for storing SQLite databases
+         in plain text SQL, enabling meaningful diffs and merges.
+         .
+         Features:
+          - Byte-by-byte identical dumps across Windows/Linux/macOS
+          - Consistent float rounding (deterministic dumps)
+          - Strips SQLite's internal/system tables from dumps
+          - Temp-file I/O for robustness
+          - Handles broken pipes with Git GUI Clients
+          - Optional logging for diagnostics
+          - Schema/data separation for cleaner diffs
+        Homepage: https://github.com/danielsiegl/gitsqlite
+        EOF
+        
+        # Build the package
+        dpkg-deb --build "${PKG_DIR}"
+        
+        # Move to bin directory for upload
+        mv "${PKG_DIR}.deb" "bin/gitsqlite_${VERSION}_arm64.deb"
+        
+        echo "✓ Debian package created: bin/gitsqlite_${VERSION}_arm64.deb"
+        ls -lh "bin/gitsqlite_${VERSION}_arm64.deb"
     
     - name: Upload binary Artifacts
       uses: actions/upload-artifact@v4
@@ -474,4 +579,104 @@ jobs:
           ubuntu_sql/*.sql
           windows_sql/*.sql
         retention-days: 5
+
+  test-debian-packages:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    
+    - name: Test Debian package AMD64 installation
+      run: |
+        echo "=== Testing Debian Package AMD64 Installation ==="
+        
+        # Find and install the Debian package
+        DEB_FILE=$(find bin -name "*_amd64.deb" -type f)
+        echo "Found Debian package: $DEB_FILE"
+        
+        # Install the package
+        sudo dpkg -i "$DEB_FILE" || true
+        
+        # Install dependencies if needed
+        sudo apt-get update && sudo apt-get install -f -y
+        
+        # Verify installation
+        if ! command -v gitsqlite &> /dev/null; then
+          echo "ERROR: gitsqlite command not found after installation"
+          exit 1
+        fi
+        
+        echo "✓ gitsqlite installed successfully"
+        
+        # Test version command
+        gitsqlite -version
+        
+        # Create a simple test database
+        sqlite3 test.db "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO test VALUES(1, 'Test');"
+        
+        # Test clean operation
+        gitsqlite clean < test.db > test.sql
+        if [ ! -s test.sql ]; then
+          echo "ERROR: Clean operation failed"
+          exit 1
+        fi
+        echo "✓ Clean operation successful"
+        
+        # Test smudge operation
+        gitsqlite smudge < test.sql > test_restored.db
+        if [ ! -s test_restored.db ]; then
+          echo "ERROR: Smudge operation failed"
+          exit 1
+        fi
+        echo "✓ Smudge operation successful"
+        
+        # Verify data integrity
+        ORIGINAL_COUNT=$(sqlite3 test.db "SELECT COUNT(*) FROM test;")
+        RESTORED_COUNT=$(sqlite3 test_restored.db "SELECT COUNT(*) FROM test;")
+        
+        if [ "$ORIGINAL_COUNT" != "$RESTORED_COUNT" ]; then
+          echo "ERROR: Data integrity check failed"
+          exit 1
+        fi
+        echo "✓ Data integrity verified"
+        
+        echo ""
+        echo "=== Debian Package AMD64 Tests: ALL PASSED ==="
+    
+    - name: Verify package metadata
+      run: |
+        echo "=== Verifying Debian Package Metadata ==="
+        
+        DEB_FILE=$(find bin -name "*_amd64.deb" -type f)
+        
+        # Check package info
+        dpkg-deb --info "$DEB_FILE"
+        
+        # Verify package contents
+        echo ""
+        echo "Package contents:"
+        dpkg-deb --contents "$DEB_FILE"
+        
+        # Verify control file
+        echo ""
+        echo "Control file:"
+        dpkg-deb --field "$DEB_FILE"
+        
+        # Check that sqlite3 is listed as dependency
+        if ! dpkg-deb --field "$DEB_FILE" | grep -q "Depends:.*sqlite3"; then
+          echo "ERROR: sqlite3 dependency not found in package"
+          exit 1
+        fi
+        echo "✓ sqlite3 dependency correctly listed"
+        
+        echo ""
+        echo "=== Package Metadata Verification: PASSED ==="
+
     

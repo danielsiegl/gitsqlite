@@ -1,0 +1,5 @@
+gitsqlite (0.0.0) UNRELEASED; urgency=medium
+
+  * Automated build from GitHub releases
+
+ -- Daniel Siegl <daniel@siegl.dev>  Wed, 05 Feb 2026 17:00:00 +0000

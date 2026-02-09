@@ -6,8 +6,8 @@ import "strings"
 // This function implements the logic to exclude sqlite_sequence table operations
 // from dumps to ensure consistent cross-platform behavior.
 func ShouldSkipLine(line string) bool {
-	// Skip CREATE TABLE sqlite_sequence line
-	if strings.Contains(line, "CREATE TABLE sqlite_sequence") {
+	// Skip CREATE TABLE sqlite_sequence line (with or without IF NOT EXISTS)
+	if strings.Contains(line, "CREATE TABLE") && strings.Contains(line, "sqlite_sequence") {
 		return true
 	}
 	// Skip INSERT INTO sqlite_sequence lines
@@ -16,6 +16,10 @@ func ShouldSkipLine(line string) bool {
 	}
 	// Skip DELETE FROM sqlite_sequence;
 	if strings.Contains(line, "DELETE FROM sqlite_sequence") || strings.Contains(line, "DELETE FROM \"sqlite_sequence\"") {
+		return true
+	}
+	// Skip PRAGMA writable_schema (used when creating sqlite_sequence)
+	if strings.Contains(line, "PRAGMA writable_schema") {
 		return true
 	}
 	return false

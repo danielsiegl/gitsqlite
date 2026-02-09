@@ -123,6 +123,118 @@ jobs:
                 exit 1
             }
 
+        - name: Create Debian Package for Linux AMD64
+          shell: bash
+          run: |
+            echo "Creating Debian package for Linux AMD64..."
+            
+            # Install dpkg-deb if not available
+            sudo apt-get update && sudo apt-get install -y dpkg-dev
+            
+            # Extract version from tag (remove 'v' prefix)
+            VERSION="${{ steps.get_version.outputs.version }}"
+            VERSION_CLEAN="${VERSION#v}"
+            
+            # Update changelog with actual version
+            sed -i "s/0.0.0/${VERSION_CLEAN}/" debian/changelog
+            sed -i "s/UNRELEASED/stable/" debian/changelog
+            sed -i "s/Wed, 05 Feb 2026 17:00:00 +0000/$(date -R)/" debian/changelog
+            
+            # Create package directory structure
+            PKG_DIR="gitsqlite_${VERSION_CLEAN}_amd64"
+            mkdir -p "${PKG_DIR}/DEBIAN"
+            mkdir -p "${PKG_DIR}/usr/bin"
+            
+            # Copy binary
+            cp bin/gitsqlite-linux-amd64 "${PKG_DIR}/usr/bin/gitsqlite"
+            chmod 755 "${PKG_DIR}/usr/bin/gitsqlite"
+            
+            # Create DEBIAN/control file
+            # NOTE: Keep this content in sync with ARM64 package, main.yml workflow, and debian/control
+            cat > "${PKG_DIR}/DEBIAN/control" << EOF
+            Package: gitsqlite
+            Version: ${VERSION_CLEAN}
+            Section: vcs
+            Priority: optional
+            Architecture: amd64
+            Depends: sqlite3
+            Maintainer: Daniel Siegl <daniel@siegl.dev>
+            Description: Git clean/smudge/diff filter for SQLite databases
+             gitsqlite is a Git clean/smudge/diff filter for storing SQLite databases
+             in plain text SQL, enabling meaningful diffs and merges.
+             .
+             Features:
+              - Byte-by-byte identical dumps across Windows/Linux/macOS
+              - Consistent float rounding (deterministic dumps)
+              - Strips SQLite's internal/system tables from dumps
+              - Temp-file I/O for robustness
+              - Handles broken pipes with Git GUI Clients
+              - Optional logging for diagnostics
+              - Schema/data separation for cleaner diffs
+            Homepage: https://github.com/danielsiegl/gitsqlite
+            EOF
+            
+            # Build the package
+            dpkg-deb --build "${PKG_DIR}"
+            
+            # Move to bin directory for upload
+            mv "${PKG_DIR}.deb" "bin/gitsqlite_${VERSION_CLEAN}_amd64.deb"
+            
+            echo "✓ Debian package created: bin/gitsqlite_${VERSION_CLEAN}_amd64.deb"
+            ls -lh "bin/gitsqlite_${VERSION_CLEAN}_amd64.deb"
+
+        - name: Create Debian Package for Linux ARM64
+          shell: bash
+          run: |
+            echo "Creating Debian package for Linux ARM64..."
+            
+            # Extract version from tag (remove 'v' prefix)
+            VERSION="${{ steps.get_version.outputs.version }}"
+            VERSION_CLEAN="${VERSION#v}"
+            
+            # Create package directory structure
+            PKG_DIR="gitsqlite_${VERSION_CLEAN}_arm64"
+            mkdir -p "${PKG_DIR}/DEBIAN"
+            mkdir -p "${PKG_DIR}/usr/bin"
+            
+            # Copy binary
+            cp bin/gitsqlite-linux-arm64 "${PKG_DIR}/usr/bin/gitsqlite"
+            chmod 755 "${PKG_DIR}/usr/bin/gitsqlite"
+            
+            # Create DEBIAN/control file
+            # NOTE: Keep this content in sync with AMD64 package, main.yml workflow, and debian/control
+            cat > "${PKG_DIR}/DEBIAN/control" << EOF
+            Package: gitsqlite
+            Version: ${VERSION_CLEAN}
+            Section: vcs
+            Priority: optional
+            Architecture: arm64
+            Depends: sqlite3
+            Maintainer: Daniel Siegl <daniel@siegl.dev>
+            Description: Git clean/smudge/diff filter for SQLite databases
+             gitsqlite is a Git clean/smudge/diff filter for storing SQLite databases
+             in plain text SQL, enabling meaningful diffs and merges.
+             .
+             Features:
+              - Byte-by-byte identical dumps across Windows/Linux/macOS
+              - Consistent float rounding (deterministic dumps)
+              - Strips SQLite's internal/system tables from dumps
+              - Temp-file I/O for robustness
+              - Handles broken pipes with Git GUI Clients
+              - Optional logging for diagnostics
+              - Schema/data separation for cleaner diffs
+            Homepage: https://github.com/danielsiegl/gitsqlite
+            EOF
+            
+            # Build the package
+            dpkg-deb --build "${PKG_DIR}"
+            
+            # Move to bin directory for upload
+            mv "${PKG_DIR}.deb" "bin/gitsqlite_${VERSION_CLEAN}_arm64.deb"
+            
+            echo "✓ Debian package created: bin/gitsqlite_${VERSION_CLEAN}_arm64.deb"
+            ls -lh "bin/gitsqlite_${VERSION_CLEAN}_arm64.deb"
+
         - name: Upload Linux AMD64 Binary
           uses: svenstaro/upload-release-action@2.9.0
           with:
@@ -166,6 +278,33 @@ jobs:
             asset_name: gitsqlite-macos-arm64
             tag: ${{ github.ref }}
             overwrite: true
+
+        - name: Set version variable
+          id: version_clean
+          shell: bash
+          run: |
+            VERSION="${{ steps.get_version.outputs.version }}"
+            VERSION_CLEAN="${VERSION#v}"
+            echo "version=${VERSION_CLEAN}" >> $GITHUB_OUTPUT
+
+        - name: Upload Debian Package AMD64
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/gitsqlite_${{ steps.version_clean.outputs.version }}_amd64.deb
+            asset_name: gitsqlite_${{ steps.version_clean.outputs.version }}_amd64.deb
+            tag: ${{ github.ref }}
+            overwrite: true
+
+        - name: Upload Debian Package ARM64
+          uses: svenstaro/upload-release-action@2.9.0
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: bin/gitsqlite_${{ steps.version_clean.outputs.version }}_arm64.deb
+            asset_name: gitsqlite_${{ steps.version_clean.outputs.version }}_arm64.deb
+            tag: ${{ github.ref }}
+            overwrite: true
+
     winget:
         needs: buildallplatforms
         runs-on: windows-latest

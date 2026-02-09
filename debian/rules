@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+dh $@
+
+override_dh_auto_build:
+# Binary is already built by the workflow, skip build
+
+override_dh_auto_test:
+# Tests are run by the workflow, skip tests
+
+override_dh_auto_install:
+# Install binary to the correct location
+mkdir -p debian/gitsqlite/usr/bin
+cp $(BINARY_PATH) debian/gitsqlite/usr/bin/gitsqlite
+chmod 755 debian/gitsqlite/usr/bin/gitsqlite
