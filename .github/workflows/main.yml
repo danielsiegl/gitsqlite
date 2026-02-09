@@ -482,7 +482,7 @@ jobs:
         # Test 1: Verify valid file works
         echo ""
         echo "Test 1: Verify smudge works with valid hash"
-        if ! ./bin/gitsqlite-linux-amd64 smudge < valid.sql > restored_valid.db 2>&1; then
+        if ! ./bin/gitsqlite-linux-amd64 -verify-hash smudge < valid.sql > restored_valid.db 2>&1; then
           echo "ERROR: Smudge failed with valid hash"
           exit 1
         fi
@@ -500,7 +500,7 @@ jobs:
         -- gitsqlite-hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
         EOF
 
-        if ./bin/gitsqlite-linux-amd64 smudge < corrupted_hash.sql > output.db 2>&1; then
+        if ./bin/gitsqlite-linux-amd64 -verify-hash smudge < corrupted_hash.sql > output.db 2>&1; then
           echo "ERROR: Smudge should have failed with invalid hash but succeeded"
           exit 1
         fi
@@ -513,7 +513,7 @@ jobs:
         # Insert a malicious line before COMMIT but keep the original hash
         sed -i '/COMMIT;/i INSERT INTO test VALUES(999,'"'"'Hacker'"'"');' modified_content.sql
 
-        if ./bin/gitsqlite-linux-amd64 smudge < modified_content.sql > output2.db 2>&1; then
+        if ./bin/gitsqlite-linux-amd64 -verify-hash smudge < modified_content.sql > output2.db 2>&1; then
           echo "ERROR: Smudge should have failed with modified content but succeeded"
           exit 1
         fi
@@ -528,7 +528,7 @@ jobs:
         cp .gitsqliteschema corrupted_schema.sql
         sed -i 's/TEXT NOT NULL/TEXT/' corrupted_schema.sql
 
-        if ./bin/gitsqlite-linux-amd64 -schema-file corrupted_schema.sql smudge < data_only.sql > output3.db 2>&1; then
+        if ./bin/gitsqlite-linux-amd64 -verify-hash -schema-file corrupted_schema.sql smudge < data_only.sql > output3.db 2>&1; then
           echo "ERROR: Smudge should have failed with corrupted schema file but succeeded"
           exit 1
         fi
@@ -539,7 +539,7 @@ jobs:
         echo "Test 5: Smudge should fail when hash line is missing"
         head -n -1 valid.sql > missing_hash.sql
 
-        if ./bin/gitsqlite-linux-amd64 smudge < missing_hash.sql > output4.db 2>&1; then
+        if ./bin/gitsqlite-linux-amd64 -verify-hash smudge < missing_hash.sql > output4.db 2>&1; then
           echo "ERROR: Smudge should have failed with missing hash but succeeded"
           exit 1
         fi
@@ -547,6 +547,126 @@ jobs:
 
         echo ""
         echo "=== Hash Validation Tests: ALL PASSED ==="
+
+  test-verify-hash-flag:
+    needs: [build, create-smoketest-db]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: gitsqlite-binaries
+        path: bin
+    - name: Download smoketest database
+      uses: actions/download-artifact@v4
+      with:
+        name: smoketest-db
+        path: .
+    - name: Make Linux binary executable
+      run: chmod +x bin/gitsqlite-linux-amd64
+    - name: Test -verify-hash flag functionality
+      run: |
+        echo "=== Testing -verify-hash Flag Functionality ==="
+
+        # Create a valid SQL file with hash
+        echo "Step 1: Create valid SQL file"
+        ./bin/gitsqlite-linux-amd64 clean < smoketest.db > valid.sql
+        echo "✓ Valid SQL file created"
+
+        # Create invalid hash SQL file
+        echo ""
+        echo "Step 2: Create SQL file with invalid hash"
+        cat > invalid_hash.sql << 'EOF'
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT);
+        INSERT INTO test VALUES(1,'TestData');
+        COMMIT;
+        -- gitsqlite-hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        EOF
+        echo "✓ Invalid hash SQL file created"
+
+        # Create SQL file without hash
+        echo ""
+        echo "Step 3: Create SQL file without hash"
+        cat > no_hash.sql << 'EOF'
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT);
+        INSERT INTO test VALUES(1,'TestData');
+        COMMIT;
+        EOF
+        echo "✓ No hash SQL file created"
+
+        # Test 1: Valid hash with -verify-hash flag (should succeed)
+        echo ""
+        echo "Test 1: Valid hash WITH -verify-hash flag (should succeed)"
+        if ! ./bin/gitsqlite-linux-amd64 -verify-hash smudge < valid.sql > test1.db 2>&1; then
+          echo "ERROR: Smudge with valid hash and -verify-hash flag should succeed"
+          exit 1
+        fi
+        echo "✓ Correctly succeeded with valid hash"
+
+        # Test 2: Invalid hash with -verify-hash flag (should fail)
+        echo ""
+        echo "Test 2: Invalid hash WITH -verify-hash flag (should FAIL)"
+        if ./bin/gitsqlite-linux-amd64 -verify-hash smudge < invalid_hash.sql > test2.db 2>&1; then
+          echo "ERROR: Smudge with invalid hash and -verify-hash flag should fail"
+          exit 1
+        fi
+        echo "✓ Correctly failed with invalid hash when enforcing"
+
+        # Test 3: Missing hash with -verify-hash flag (should fail)
+        echo ""
+        echo "Test 3: Missing hash WITH -verify-hash flag (should FAIL)"
+        if ./bin/gitsqlite-linux-amd64 -verify-hash smudge < no_hash.sql > test3.db 2>&1; then
+          echo "ERROR: Smudge with missing hash and -verify-hash flag should fail"
+          exit 1
+        fi
+        echo "✓ Correctly failed with missing hash when enforcing"
+
+        # Test 4: Invalid hash WITHOUT -verify-hash flag (should succeed)
+        echo ""
+        echo "Test 4: Invalid hash WITHOUT -verify-hash flag (should succeed)"
+        if ! ./bin/gitsqlite-linux-amd64 smudge < invalid_hash.sql > test4.db 2>&1; then
+          echo "ERROR: Smudge with invalid hash but no -verify-hash flag should succeed"
+          exit 1
+        fi
+        if [ ! -f test4.db ]; then
+          echo "ERROR: Database file was not created"
+          exit 1
+        fi
+        echo "✓ Correctly succeeded without enforcement (non-enforce mode)"
+
+        # Test 5: Missing hash WITHOUT -verify-hash flag (should succeed)
+        echo ""
+        echo "Test 5: Missing hash WITHOUT -verify-hash flag (should succeed)"
+        if ! ./bin/gitsqlite-linux-amd64 smudge < no_hash.sql > test5.db 2>&1; then
+          echo "ERROR: Smudge with missing hash but no -verify-hash flag should succeed"
+          exit 1
+        fi
+        if [ ! -f test5.db ]; then
+          echo "ERROR: Database file was not created"
+          exit 1
+        fi
+        echo "✓ Correctly succeeded without enforcement (non-enforce mode)"
+
+        # Test 6: Valid hash WITHOUT -verify-hash flag (should succeed)
+        echo ""
+        echo "Test 6: Valid hash WITHOUT -verify-hash flag (should succeed)"
+        if ! ./bin/gitsqlite-linux-amd64 smudge < valid.sql > test6.db 2>&1; then
+          echo "ERROR: Smudge with valid hash should always succeed"
+          exit 1
+        fi
+        echo "✓ Correctly succeeded with valid hash"
+
+        echo ""
+        echo "=== -verify-hash Flag Tests: ALL PASSED ==="
+        echo ""
+        echo "Summary:"
+        echo "  - With -verify-hash flag: Enforces validation (fails on invalid/missing hash)"
+        echo "  - Without -verify-hash flag: Optional validation (logs warnings but continues)"
 
   cross-evaluate:
     needs: [test-ubuntu-amd64, test-windows-amd64]
