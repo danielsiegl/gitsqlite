@@ -53,9 +53,9 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 		if result.Valid {
 			slog.Info("Data hash verification successful", "message", result.Message)
 		} else {
-			slog.Warn("Data hash verification failed (non-enforce mode)", 
-				"valid", result.Valid, 
-				"error", result.Error, 
+			slog.Warn("Data hash verification failed (non-enforce mode)",
+				"valid", result.Valid,
+				"error", result.Error,
 				"message", result.Message)
 		}
 	}
@@ -92,10 +92,10 @@ func Smudge(ctx context.Context, eng *sqlite.Engine, in io.Reader, out io.Writer
 				if result.Valid {
 					slog.Info("Schema hash verification successful", "file", schemaFile, "message", result.Message)
 				} else {
-					slog.Warn("Schema hash verification failed (non-enforce mode)", 
+					slog.Warn("Schema hash verification failed (non-enforce mode)",
 						"file", schemaFile,
-						"valid", result.Valid, 
-						"error", result.Error, 
+						"valid", result.Valid,
+						"error", result.Error,
 						"message", result.Message)
 				}
 			}
