@@ -113,6 +113,99 @@ func VerifyAndStripHash(r io.Reader) (io.Reader, error) {
 	return &content, nil
 }
 
+// VerificationResult contains the result of optional hash verification
+type VerificationResult struct {
+	Valid   bool   // Whether hash was valid
+	Error   string // Error message if validation failed
+	Message string // Descriptive message about verification status
+}
+
+// VerifyHashOptional reads all data from r, attempts to verify the hash comment at the end,
+// and returns the content without the hash line along with verification status.
+// Unlike VerifyAndStripHash, this function does not return an error on verification failure.
+func VerifyHashOptional(r io.Reader) (io.Reader, *VerificationResult) {
+	// Read all content
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, &VerificationResult{
+			Valid:   false,
+			Error:   err.Error(),
+			Message: fmt.Sprintf("Failed to read input: %v", err),
+		}
+	}
+
+	// Find the last line
+	lines := bytes.Split(data, []byte("\n"))
+	if len(lines) == 0 {
+		return bytes.NewReader(data), &VerificationResult{
+			Valid:   false,
+			Error:   "empty input",
+			Message: "Input is empty",
+		}
+	}
+
+	// Handle trailing newline (Split will create an empty last element)
+	var lastLine []byte
+	var contentLines [][]byte
+	if len(lines[len(lines)-1]) == 0 && len(lines) > 1 {
+		// Last element is empty, actual last line is second to last
+		lastLine = lines[len(lines)-2]
+		contentLines = lines[:len(lines)-2]
+	} else {
+		lastLine = lines[len(lines)-1]
+		contentLines = lines[:len(lines)-1]
+	}
+
+	// Check if last line is a hash comment
+	lastLineStr := string(lastLine)
+	if !strings.HasPrefix(lastLineStr, HashPrefix) {
+		// No hash found, return original content
+		return bytes.NewReader(data), &VerificationResult{
+			Valid:   false,
+			Error:   "missing hash",
+			Message: fmt.Sprintf("Missing gitsqlite hash signature (expected last line to start with '%s')", HashPrefix),
+		}
+	}
+
+	// Extract the hash from the last line
+	expectedHash := strings.TrimPrefix(lastLineStr, HashPrefix)
+	expectedHash = strings.TrimSpace(expectedHash)
+
+	// Compute hash of content without the hash line
+	var content bytes.Buffer
+	for i, line := range contentLines {
+		content.Write(line)
+		if i < len(contentLines)-1 {
+			content.WriteByte('\n')
+		}
+	}
+	// Add trailing newline if content is not empty
+	if content.Len() > 0 {
+		content.WriteByte('\n')
+	}
+
+	// Compute actual hash
+	h := sha256.New()
+	h.Write(content.Bytes())
+	actualHash := hex.EncodeToString(h.Sum(nil))
+
+	// Check if hash matches
+	if actualHash != expectedHash {
+		return &content, &VerificationResult{
+			Valid:   false,
+			Error:   "hash mismatch",
+			Message: fmt.Sprintf("Hash verification failed: expected %s, got %s (file may have been modified)", expectedHash, actualHash),
+		}
+	}
+
+	// Hash is valid
+	return &content, &VerificationResult{
+		Valid:   true,
+		Error:   "",
+		Message: "Hash verification successful",
+	}
+}
+
 // ExtractHashFromReader is a helper that reads from r and uses a scanner to find the hash
 func ExtractHashFromReader(r io.Reader) (string, error) {
 	scanner := bufio.NewScanner(r)
