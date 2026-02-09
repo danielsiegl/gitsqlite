@@ -3,7 +3,10 @@ name: Create Release binaries
 on:
     release:
       types: [created]
- 
+permissions:
+    contents: write
+    id-token: write
+
 jobs:
     buildallplatforms:
         runs-on: ubuntu-latest
