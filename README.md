@@ -23,7 +23,9 @@ There are several benefits over [using sqlite3 .dump directly](https://garrit.xy
 - Consistent float rounding (deterministic dumps).
 - Strip SQLite’s internal/system tables from dumps.
 - Temp-file I/O for robustness (vs fragile pipes).
-- handles broken pipes with Git Gui Clients- SHA-256 hash validation for data integrity verification- easier to deploy and maintain in an organization - eg: winget for windows
+- handles broken pipes with Git Gui Clients
+- SHA-256 hash validation for data integrity verification ([details](HASH_VERIFICATION_AND_TESTING.md))
+- easier to deploy and maintain in an organization - eg: winget for windows
 - Optional: logging for diagnostics
 
 ## Quick Start
@@ -477,6 +479,8 @@ During smudge operations, hash validation can have three outcomes:
 - Both data files and schema files (when using `-schema`) are independently hashed
 
 **Note**: While hash validation protects data integrity, it should be combined with proper Git security practices (signed commits, protected branches, etc.) for complete security.
+
+For detailed information about hash verification, testing, and implementation details, see [Hash Verification & Data Integrity](HASH_VERIFICATION_AND_TESTING.md).
 
 
 ## Logging
