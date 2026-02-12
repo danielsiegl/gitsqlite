@@ -26,7 +26,7 @@ jobs:
             > releases.json
           
           echo "Release data fetched successfully"
-          echo "Number of releases: $(jq length releases.json)"
+          echo "Number of releases: $(jq 'length' releases.json)"
 
       - name: Generate download report
         run: |
@@ -49,7 +49,7 @@ jobs:
           jq -r '.[] | "### \(.name // .tag_name)\n\n**Published:** \(.published_at)\n**Tag:** \(.tag_name)\n\n#### Assets\n\n" + (.assets | map("- **\(.name)**: \(.download_count) downloads") | join("\n")) + "\n\n---\n"' releases.json >> download-report.md
           
           # Add total downloads summary at the top
-          TOTAL_DOWNLOADS=$(jq '[.[].assets[].download_count] | add' releases.json)
+          TOTAL_DOWNLOADS=$(jq '[.[].assets[].download_count] | add // 0' releases.json)
           sed -i "/## Release Download Statistics/i ## Summary\n\n**Total Downloads (all releases):** $TOTAL_DOWNLOADS\n" download-report.md
           
           echo "Report generated successfully"
