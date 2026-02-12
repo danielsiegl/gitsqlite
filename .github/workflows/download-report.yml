@@ -1,0 +1,75 @@
+name: Monthly Download Report
+
+on:
+  schedule:
+    # Run on the 1st of each month at 00:00 UTC
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # Allow manual trigger for testing
+
+permissions:
+  contents: read
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch release data from GitHub API
+        id: fetch_releases
+        run: |
+          echo "Fetching release data..."
+          curl -s -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/danielsiegl/gitsqlite/releases" \
+            > releases.json
+          
+          echo "Release data fetched successfully"
+          echo "Number of releases: $(jq length releases.json)"
+
+      - name: Generate download report
+        run: |
+          echo "Generating download report..."
+          
+          # Get current date
+          REPORT_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          # Create report file with header
+          cat > download-report.md << EOF
+          # gitsqlite Download Report
+          
+          **Generated on:** $REPORT_DATE
+          
+          ## Release Download Statistics
+          
+          EOF
+          
+          # Process each release and extract download counts
+          jq -r '.[] | "### \(.name // .tag_name)\n\n**Published:** \(.published_at)\n**Tag:** \(.tag_name)\n\n#### Assets\n\n" + (.assets | map("- **\(.name)**: \(.download_count) downloads") | join("\n")) + "\n\n---\n"' releases.json >> download-report.md
+          
+          # Add total downloads summary at the top
+          TOTAL_DOWNLOADS=$(jq '[.[].assets[].download_count] | add' releases.json)
+          sed -i "/## Release Download Statistics/i ## Summary\n\n**Total Downloads (all releases):** $TOTAL_DOWNLOADS\n" download-report.md
+          
+          echo "Report generated successfully"
+          
+      - name: Display report summary
+        run: |
+          echo "=== Download Report Summary ==="
+          head -n 20 download-report.md
+          echo "..."
+          echo "Full report saved as artifact"
+
+      - name: Set artifact name
+        id: artifact_name
+        run: echo "name=download-report-$(date -u +"%Y-%m")" >> $GITHUB_OUTPUT
+
+      - name: Upload report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.name }}
+          path: |
+            download-report.md
+            releases.json
+          retention-days: 90
