@@ -25,6 +25,12 @@ jobs:
             "https://api.github.com/repos/danielsiegl/gitsqlite/releases" \
             > releases.json
           
+          # Verify the API response is valid JSON
+          if ! jq -e . >/dev/null 2>&1 releases.json; then
+            echo "Error: Failed to fetch valid release data from GitHub API"
+            exit 1
+          fi
+          
           echo "Release data fetched successfully"
           echo "Number of releases: $(jq 'length' releases.json)"
 
@@ -46,7 +52,15 @@ jobs:
           EOF
           
           # Process each release and extract download counts
-          jq -r '.[] | "### \(.name // .tag_name)\n\n**Published:** \(.published_at)\n**Tag:** \(.tag_name)\n\n#### Assets\n\n" + (.assets | map("- **\(.name)**: \(.download_count) downloads") | join("\n")) + "\n\n---\n"' releases.json >> download-report.md
+          # For each release: display name/tag, published date, and list of assets with download counts
+          jq -r '.[] | 
+            "### \(.name // .tag_name)\n\n**Published:** \(.published_at)\n**Tag:** \(.tag_name)\n\n#### Assets\n\n" + 
+            (if (.assets | length) > 0 then 
+              (.assets | map("- **\(.name)**: \(.download_count) downloads") | join("\n")) 
+            else 
+              "No assets available" 
+            end) + 
+            "\n\n---\n"' releases.json >> download-report.md
           
           # Add total downloads summary at the top
           TOTAL_DOWNLOADS=$(jq '[.[].assets[].download_count] | add // 0' releases.json)
