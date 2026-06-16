@@ -47,3 +47,16 @@ func TestTextReturnsGermanMessage(t *testing.T) {
 		t.Fatalf("Text() = %q, want %q", got, want)
 	}
 }
+
+func TestTextDefaultsToEnglish(t *testing.T) {
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_MESSAGES", "")
+	t.Setenv("LANG", "")
+	t.Setenv("LANGUAGE", "")
+
+	got := Text("usageHeader", "gitsqlite")
+	want := "Usage: gitsqlite [options] <operation>\n\n"
+	if got != want {
+		t.Fatalf("Text() = %q, want %q", got, want)
+	}
+}
