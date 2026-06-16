@@ -103,7 +103,7 @@ func Current() Locale {
 		os.Getenv("LANG"),
 		os.Getenv("LANGUAGE"),
 	} {
-		if locale, ok := detectLocaleFromEnvValue(value); ok {
+		if locale, ok := parseLocaleFromEnvValue(value); ok {
 			return locale
 		}
 	}
@@ -123,7 +123,7 @@ func Text(key string, args ...any) string {
 	return key
 }
 
-func detectLocaleFromEnvValue(value string) (Locale, bool) {
+func parseLocaleFromEnvValue(value string) (Locale, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return English, false
