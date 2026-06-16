@@ -103,11 +103,8 @@ func Current() Locale {
 		os.Getenv("LANG"),
 		os.Getenv("LANGUAGE"),
 	} {
-		if locale := localeFromValue(value); locale == German {
-			return German
-		}
-		if value != "" {
-			return English
+		if locale, ok := detectLocaleFromEnvValue(value); ok {
+			return locale
 		}
 	}
 
@@ -126,10 +123,10 @@ func Text(key string, args ...any) string {
 	return key
 }
 
-func localeFromValue(value string) Locale {
+func detectLocaleFromEnvValue(value string) (Locale, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return English
+		return English, false
 	}
 
 	if separator := strings.Index(value, ":"); separator >= 0 {
@@ -138,8 +135,8 @@ func localeFromValue(value string) Locale {
 
 	value = strings.ToLower(strings.ReplaceAll(value, "_", "-"))
 	if value == "de" || strings.HasPrefix(value, "de-") {
-		return German
+		return German, true
 	}
 
-	return English
+	return English, true
 }
